@@ -1,0 +1,8 @@
+#!/bin/bash
+mkdir -p /usr/local/mydebs/
+cd /usr/local/mydebs/
+mkdir -p dists/stable/main/binary-amd64
+dpkg-scanpackages --multiversion pool/ > dists/stable/main/binary-amd64/Packages
+gzip -9 --keep --force dists/stable/main/binary-amd64/Packages
+apt-ftparchive -c conf/apt.conf release dists/stable > dists/stable/Release
+
