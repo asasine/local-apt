@@ -4,9 +4,9 @@ Your favorite program only offers an HTTP download but you want APT? No problem!
 
 
 # Installation
-1. Install `dpkg-dev`
-1. Copy the contents of [bin/](bin/) to a location on your `$PATH`. I recommend `/usr/local/bin/`
-1. Copy the [conf/](conf/) directory to `/usr/local/mydebs/` as `/usr/local/mydebs/conf/`
+```bash
+sudo ./install.bash
+```
 
 # Usage
 ```bash
