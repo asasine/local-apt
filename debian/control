@@ -1,0 +1,17 @@
+Source: local-apt
+Section: admin
+Priority: optional
+Maintainer: Adam <adam@example.com>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.6.0
+Homepage: https://github.com/yourusername/local-apt
+Vcs-Git: https://github.com/yourusername/local-apt.git
+Vcs-Browser: https://github.com/yourusername/local-apt
+
+Package: local-apt
+Architecture: all
+Depends: ${misc:Depends}, apt-utils, wget
+Description: Create and manage local APT repositories
+ Local APT allows you to create your own local APT repository from HTTP downloads.
+ It provides utilities to download packages and generate APT repository metadata,
+ enabling you to use apt-get and unattended-upgrade with your custom repositories.

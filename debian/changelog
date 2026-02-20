@@ -1,0 +1,7 @@
+local-apt (1.0.0-1) unstable; urgency=medium
+
+  * Initial Debian package release
+  * Includes update-local-repo and update-discord-repo utilities
+  * Adds local APT repository configuration
+
+ -- Adam Sasine <asasine@users.noreply.github.com>  Thu, 20 Feb 2026 00:00:00 +0000
