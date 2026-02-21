@@ -2,20 +2,5 @@
 %:
 	dh $@
 
+# Allow /usr/local files for repository data
 override_dh_usrlocal:
-	# Allow /usr/local files
-
-override_dh_auto_install:
-	dh_auto_install
-	# Install scripts from src/bin/
-	mkdir -p $(CURDIR)/debian/local-apt/usr/local/bin
-	install -m 755 $(CURDIR)/src/bin/update-local-repo $(CURDIR)/debian/local-apt/usr/local/bin/
-	install -m 755 $(CURDIR)/src/bin/update-discord-repo $(CURDIR)/debian/local-apt/usr/local/bin/
-	# Install APT sources config
-	mkdir -p $(CURDIR)/debian/local-apt/etc/apt/sources.list.d
-	install -m 644 $(CURDIR)/src/local.sources $(CURDIR)/debian/local-apt/etc/apt/sources.list.d/
-	# Install apt-ftparchive configs
-	mkdir -p $(CURDIR)/debian/local-apt/usr/local/mydebs/conf
-	install -m 644 $(CURDIR)/src/conf/apt.conf $(CURDIR)/debian/local-apt/usr/local/mydebs/conf/
-	install -m 644 $(CURDIR)/src/conf/generate.conf $(CURDIR)/debian/local-apt/usr/local/mydebs/conf/
-	install -m 644 $(CURDIR)/src/conf/tree.conf $(CURDIR)/debian/local-apt/usr/local/mydebs/conf/
