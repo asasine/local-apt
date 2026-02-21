@@ -2,8 +2,8 @@
 set -e
 
 # Create necessary runtime directories for the local APT repository
-mkdir -p /usr/local/mydebs/pool/main/d/discord
-mkdir -p /usr/local/mydebs/dists/stable/main/binary-amd64
-mkdir -p /usr/local/mydebs/cache
+mkdir -p /var/lib/local-apt/pool/main/d/discord
+mkdir -p /var/lib/local-apt/dists/stable/main/binary-amd64
+mkdir -p /var/lib/local-apt/cache
 
 #DEBHELPER#

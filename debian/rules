@@ -1,6 +1,3 @@
 #!/usr/bin/make -f
 %:
 	dh $@
-
-# Allow /usr/local files for repository data
-override_dh_usrlocal:

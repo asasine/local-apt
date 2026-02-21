@@ -1,5 +1,5 @@
 Types: deb
-URIs: file:/usr/local/mydebs
+URIs: file:/var/lib/local-apt
 Suites: stable
 Components: main
 Architectures: amd64
