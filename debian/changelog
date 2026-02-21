@@ -1,3 +1,9 @@
+local-apt (1.1.1-1) UNRELEASED; urgency=medium
+
+  * Fix invalid package naming in the repository
+
+ -- Adam Sasine <asasine@users.noreply.github.com>  Fri, 20 Feb 2026 22:31:55 -0800
+
 local-apt (1.1.0-1) unstable; urgency=medium
 
   * Add configurable package sources via simple text configuration
