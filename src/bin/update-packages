@@ -69,8 +69,10 @@ process_package() {
 
     # Extract package metadata
     local pkg_name
+    local pkg_version
     local pkg_arch
     pkg_name=$(dpkg-deb -f "$download_file" Package 2>/dev/null || echo "")
+    pkg_version=$(dpkg-deb -f "$download_file" Version 2>/dev/null || echo "")
     pkg_arch=$(dpkg-deb -f "$download_file" Architecture 2>/dev/null || echo "")
 
     if [[ -z "$pkg_name" ]]; then
@@ -78,6 +80,15 @@ process_package() {
         rm -f "$download_file"
         return 1
     fi
+
+    if [[ -z "$pkg_version" ]]; then
+        log_error "Could not extract package version from downloaded file"
+        rm -f "$download_file"
+        return 1
+    fi
+
+    # Construct standard Debian package filename
+    local std_filename="${pkg_name}_${pkg_version}_${pkg_arch}.deb"
 
     # Auto-generate target path following Debian pool convention
     # pool/main/<first-letter>/<package-name>/
@@ -87,12 +98,9 @@ process_package() {
     # Create target directory if it doesn't exist
     mkdir -p "$target_dir"
 
-    # Get the actual downloaded filename
-    local actual_filename=$(basename "$download_file")
-
-    # Move the .deb file to target directory
-    if mv "$download_file" "$target_dir/"; then
-        log_info "Successfully installed $pkg_name to $target_dir/$actual_filename"
+    # Move the .deb file to target directory with standard naming
+    if mv "$download_file" "$target_dir/$std_filename"; then
+        log_info "Successfully installed $pkg_name to $target_dir/$std_filename"
         return 0
     else
         log_error "Failed to move $pkg_name to $target_dir"
