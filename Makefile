@@ -11,7 +11,6 @@ install:
 	install -D -m 644 src/local.sources $(DESTDIR)$(SYSCONFDIR)/apt/sources.list.d/local.sources
 	# Install apt-ftparchive configs
 	install -D -m 644 src/conf/apt.conf $(DESTDIR)$(DATADIR)/conf/apt.conf
-	install -D -m 644 src/conf/generate.conf $(DESTDIR)$(DATADIR)/conf/generate.conf
 	install -D -m 644 src/conf/tree.conf $(DESTDIR)$(DATADIR)/conf/tree.conf
 	# Install configuration file (as conffile)
 	install -D -m 644 src/conffiles/packages.conf $(DESTDIR)$(SYSCONFDIR)/local-apt/packages.conf
