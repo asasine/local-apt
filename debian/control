@@ -4,9 +4,9 @@ Priority: optional
 Maintainer: Adam Sasine <asasine@users.noreply.github.com>
 Build-Depends: debhelper-compat (= 13)
 Standards-Version: 4.6.0
-Homepage: https://github.com/yourusername/local-apt
-Vcs-Git: https://github.com/yourusername/local-apt.git
-Vcs-Browser: https://github.com/yourusername/local-apt
+Homepage: https://github.com/asasine/local-apt
+Vcs-Git: https://github.com/asasine/local-apt.git
+Vcs-Browser: https://github.com/asasine/local-apt
 
 Package: local-apt
 Architecture: all
