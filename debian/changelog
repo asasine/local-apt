@@ -1,3 +1,14 @@
+local-apt (1.1.0-1) unstable; urgency=medium
+
+  * Add configurable package sources via simple text configuration
+  * Replace update-discord-repo with update-packages
+  * Add automatic pool path generation from package metadata
+  * Add flock-based locking to prevent concurrent runs
+  * Add syslog integration for all operations
+  * Add /etc/local-apt/packages.conf configuration file
+
+ -- Adam Sasine <asasine@users.noreply.github.com>  Thu, 20 Feb 2026 22:00:00 +0000
+
 local-apt (1.0.0-1) unstable; urgency=medium
 
   * Initial Debian package release

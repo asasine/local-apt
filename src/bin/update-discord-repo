@@ -1,4 +1,0 @@
-#!/bin/bash
-cd /var/lib/local-apt/pool/main/d/discord/
-wget 'https://discord.com/api/download?platform=linux&format=deb' --content-disposition --timestamping
-update-local-repo

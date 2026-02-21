@@ -2,8 +2,17 @@
 set -e
 
 # Create necessary runtime directories for the local APT repository
-mkdir -p /var/lib/local-apt/pool/main/d/discord
+mkdir -p /var/lib/local-apt/pool/main
 mkdir -p /var/lib/local-apt/dists/stable/main/binary-amd64
 mkdir -p /var/lib/local-apt/cache
+
+# Create configuration directory
+mkdir -p /etc/local-apt
+
+# Install example configuration if it doesn't exist
+if [ ! -f /etc/local-apt/packages.conf ]; then
+    cp /usr/share/local-apt/conf/packages.conf /etc/local-apt/packages.conf
+    chmod 644 /etc/local-apt/packages.conf
+fi
 
 #DEBHELPER#
