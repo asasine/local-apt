@@ -1,0 +1,43 @@
+.TH UPDATE-DISCORD-REPO 8 "February 2026" "local-apt" "System Administration"
+.SH NAME
+update-discord-repo \- download latest Discord package and update repository
+.SH SYNOPSIS
+.B update-discord-repo
+.SH DESCRIPTION
+.B update-discord-repo
+downloads the latest Discord .deb package from discord.com and updates
+the local APT repository metadata. The package is stored in the local
+repository pool and can be installed or upgraded using apt.
+.PP
+This command uses timestamping to avoid re-downloading if the package
+hasn't changed on the remote server.
+.PP
+After downloading, the command automatically runs
+.BR update-local-repo (8)
+to regenerate the repository metadata.
+.SH FILES
+.TP
+.I /var/lib/local-apt/pool/main/d/discord/
+Discord package storage location
+.SH EXIT STATUS
+Returns the exit status of the last command executed.
+.SH EXAMPLES
+To update Discord to the latest version:
+.PP
+.RS
+.nf
+sudo update-discord-repo
+sudo apt update
+sudo apt install discord
+.fi
+.RE
+.PP
+The command can be run periodically via cron or systemd timers for
+automatic updates.
+.SH SEE ALSO
+.BR update-local-repo (8),
+.BR wget (1),
+.BR apt (8),
+.BR unattended-upgrade (8)
+.SH AUTHOR
+Adam Sasine <asasine@users.noreply.github.com>

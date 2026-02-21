@@ -1,0 +1,53 @@
+.TH UPDATE-LOCAL-REPO 8 "February 2026" "local-apt" "System Administration"
+.SH NAME
+update-local-repo \- regenerate local APT repository metadata
+.SH SYNOPSIS
+.B update-local-repo
+.SH DESCRIPTION
+.B update-local-repo
+scans packages in /var/lib/local-apt/pool/ and generates APT repository
+metadata files (Packages, Packages.gz, Release) in the dists/stable
+directory structure.
+.PP
+This command must be run after adding or updating any .deb packages in the
+local repository pool.
+.PP
+The command performs the following operations:
+.IP \(bu 2
+Scans all packages in the pool directory using
+.BR dpkg-scanpackages (1)
+.IP \(bu 2
+Generates the Packages index file
+.IP \(bu 2
+Compresses the index with gzip
+.IP \(bu 2
+Creates the Release file using
+.BR apt-ftparchive (1)
+.SH FILES
+.TP
+.I /var/lib/local-apt/pool/
+Package storage directory
+.TP
+.I /var/lib/local-apt/dists/stable/main/binary-amd64/
+Repository metadata directory
+.TP
+.I /usr/share/local-apt/conf/apt.conf
+APT archive configuration
+.SH EXIT STATUS
+Returns the exit status of the last command executed.
+.SH EXAMPLES
+After adding a new .deb package to the repository:
+.PP
+.RS
+.nf
+sudo cp my-package.deb /var/lib/local-apt/pool/
+sudo update-local-repo
+.fi
+.RE
+.SH SEE ALSO
+.BR update-discord-repo (8),
+.BR dpkg-scanpackages (1),
+.BR apt-ftparchive (1),
+.BR apt (8)
+.SH AUTHOR
+Adam Sasine <asasine@users.noreply.github.com>
