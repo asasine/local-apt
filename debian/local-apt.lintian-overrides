@@ -1,0 +1,6 @@
+# This package intentionally installs APT sources configuration
+# as part of its core functionality to manage local repositories
+local-apt: package-installs-apt-sources
+
+# This is a personal package, not being uploaded to Debian
+local-apt: initial-upload-closes-no-bugs
