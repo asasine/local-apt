@@ -1,0 +1,10 @@
+output/
+.git/
+.gitignore
+*.deb
+*.changes
+*.buildinfo
+*.build
+*.tar.gz
+*.tar.xz
+*.dsc
