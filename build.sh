@@ -9,4 +9,3 @@ echo "Building package..."
 docker build --output="$OUTPUT_DIR" --target=export .
 
 echo "Build complete! Package(s) available in: $OUTPUT_DIR"
-ls -lh "$OUTPUT_DIR"

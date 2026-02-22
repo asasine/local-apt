@@ -1,21 +1,24 @@
-FROM debian:latest AS builder
+FROM debian:latest AS build
 
-# Install build dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
     debhelper \
-    && rm -rf /var/lib/apt/lists/*
+    devscripts
 
-# Copy source into build directory
 WORKDIR /build/sources
+
+# Copy the debian/control file just to install build dependencies first
+COPY debian/control debian/control
+RUN apt-get update \
+    && mk-build-deps \
+        --install \
+        --tool 'apt-get -y' \
+        debian/control
+
+# Copy the rest of the source code to the build the binary package
 COPY . .
-
-# Build the package (artifacts go to parent directory /)
 RUN dpkg-buildpackage -b -uc -us
-
-# Collect build outputs
 RUN mkdir /dist && mv ../*.deb /dist/
 
-# Export stage - extracts only the .deb files
 FROM scratch AS export
-COPY --from=builder /dist/ /
+COPY --from=build /dist/ /
