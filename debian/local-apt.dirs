@@ -1,0 +1,3 @@
+/var/lib/local-apt/pool/main
+/var/lib/local-apt/dists/stable/main/binary-amd64
+/var/lib/local-apt/cache

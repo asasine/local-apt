@@ -1,9 +1,0 @@
-#!/bin/bash
-set -e
-
-# Create necessary runtime directories for the local APT repository
-mkdir -p /var/lib/local-apt/pool/main
-mkdir -p /var/lib/local-apt/dists/stable/main/binary-amd64
-mkdir -p /var/lib/local-apt/cache
-
-#DEBHELPER#
