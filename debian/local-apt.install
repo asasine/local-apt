@@ -1,1 +1,3 @@
-src/conffiles/packages.conf etc/local-apt/
+src/apt-ftparchive-conf/*.conf usr/share/local-apt/conf/
+src/packages.conf etc/local-apt/
+src/local.sources etc/apt/sources.list.d/
