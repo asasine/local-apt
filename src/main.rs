@@ -1,12 +1,21 @@
 use anyhow::{Context, Result, anyhow};
+use clap::Parser;
 use fs2::FileExt;
-use log::{error, info, warn};
 use std::env;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use syslog_tracing::{Facility, Options, Syslog};
 use tempfile::TempDir;
+use tracing::{error, info, warn};
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::{EnvFilter, Layer};
+
+mod cli;
+
+use cli::Cli;
 
 const DEFAULT_CONFIG_FILE: &str = "/etc/local-apt/packages.conf";
 const REPO_DIR: &str = "/var/lib/local-apt";
@@ -35,35 +44,30 @@ impl Config {
     }
 }
 
-/// Initialize syslog logger
+/// Initialize tracing subscriber
 fn init_logger() {
-    syslog::init(
-        syslog::Facility::LOG_USER,
-        log::LevelFilter::Info,
-        Some("local-apt"),
-    ).ok(); // Ignore errors if syslog is not available
-}
-
-/// Log message to both syslog and console
-fn log_info_msg(msg: &str) {
-    info!("{}", msg);
-    println!("INFO: {}", msg);
-}
-
-fn log_error_msg(msg: &str) {
-    error!("{}", msg);
-    eprintln!("ERROR: {}", msg);
-}
-
-fn log_warn_msg(msg: &str) {
-    warn!("{}", msg);
-    eprintln!("WARNING: {}", msg);
+    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    let syslog = Syslog::new(c"apt-local", Options::LOG_PID, Facility::User).unwrap();
+    tracing_subscriber::registry()
+        .with(env_filter)
+        .with(vec![
+            tracing_subscriber::fmt::layer()
+                .with_writer(syslog)
+                .with_ansi(false)
+                .without_time()
+                .with_level(false)
+                .with_target(false)
+                .boxed(),
+            tracing_subscriber::fmt::layer()
+                .with_writer(std::io::stderr)
+                .boxed(),
+        ])
+        .init();
 }
 
 /// Parse configuration file and return list of package URLs
 fn parse_packages_config<P: AsRef<Path>>(config_file: P) -> Result<Vec<String>> {
-    let file = File::open(config_file.as_ref())
-        .context("Failed to open configuration file")?;
+    let file = File::open(config_file.as_ref()).context("Failed to open configuration file")?;
     let reader = BufReader::new(file);
 
     let mut urls = Vec::new();
@@ -85,21 +89,23 @@ fn parse_packages_config<P: AsRef<Path>>(config_file: P) -> Result<Vec<String>> 
 
 /// Download and process a single package
 fn process_package(url: &str, pool_dir: &Path, temp_dir: &Path) -> Result<()> {
-    log_info_msg(&format!("Processing package from: {}", url));
+    info!("Processing package from: {}", url);
 
     // Download to temp directory
     let download_file = temp_dir.join(format!("package-{}.deb", std::process::id()));
 
-    let response = reqwest::blocking::get(url)
-        .context("Failed to download package")?;
+    let response = reqwest::blocking::get(url).context("Failed to download package")?;
 
     if !response.status().is_success() {
-        return Err(anyhow!("Download failed with status: {}", response.status()));
+        return Err(anyhow!(
+            "Download failed with status: {}",
+            response.status()
+        ));
     }
 
-    let mut file = File::create(&download_file)
-        .context("Failed to create temporary file")?;
-    let content = response.bytes()
+    let mut file = File::create(&download_file).context("Failed to create temporary file")?;
+    let content = response
+        .bytes()
         .context("Failed to read response content")?;
     file.write_all(&content)
         .context("Failed to write downloaded content")?;
@@ -118,32 +124,37 @@ fn process_package(url: &str, pool_dir: &Path, temp_dir: &Path) -> Result<()> {
     }
 
     // Extract package metadata
-    let pkg_name = get_deb_field(&download_file, "Package")
-        .context("Could not extract package name")?;
-    let pkg_version = get_deb_field(&download_file, "Version")
-        .context("Could not extract package version")?;
-    let pkg_arch = get_deb_field(&download_file, "Architecture")
-        .unwrap_or_else(|_| "all".to_string());
+    let pkg_name =
+        get_deb_field(&download_file, "Package").context("Could not extract package name")?;
+    let pkg_version =
+        get_deb_field(&download_file, "Version").context("Could not extract package version")?;
+    let pkg_arch =
+        get_deb_field(&download_file, "Architecture").unwrap_or_else(|_| "all".to_string());
 
     // Construct standard Debian package filename
     let std_filename = format!("{}_{}__{}.deb", pkg_name, pkg_version, pkg_arch);
 
     // Auto-generate target path following Debian pool convention
     // pool/main/<first-letter>/<package-name>/
-    let first_letter = pkg_name.chars().next()
+    let first_letter = pkg_name
+        .chars()
+        .next()
         .ok_or_else(|| anyhow!("Package name is empty"))?;
     let target_dir = pool_dir.join(first_letter.to_string()).join(&pkg_name);
 
     // Create target directory if it doesn't exist
-    fs::create_dir_all(&target_dir)
-        .context("Failed to create target directory")?;
+    fs::create_dir_all(&target_dir).context("Failed to create target directory")?;
 
     // Move the .deb file to target directory with standard naming
     let target_path = target_dir.join(&std_filename);
     fs::rename(&download_file, &target_path)
         .context("Failed to move package to target directory")?;
 
-    log_info_msg(&format!("Successfully installed {} to {}", pkg_name, target_path.display()));
+    info!(
+        "Successfully installed {} to {}",
+        pkg_name,
+        target_path.display()
+    );
 
     Ok(())
 }
@@ -175,7 +186,7 @@ fn get_deb_field<P: AsRef<Path>>(deb_file: P, field: &str) -> Result<String> {
 
 /// Update repository metadata by calling update-local-repo
 fn update_repository_metadata() -> Result<()> {
-    log_info_msg("Updating repository metadata...");
+    info!("Updating repository metadata...");
 
     let status = Command::new("update-local-repo")
         .status()
@@ -191,32 +202,42 @@ fn update_repository_metadata() -> Result<()> {
 fn main() -> Result<()> {
     init_logger();
 
+    let args = Cli::parse();
+    match args {
+        Cli::Update(update_args) => {
+            info!("Running update command with args: {:?}", update_args);
+        }
+    }
+
+    return Ok(());
+
     let config = Config::new();
 
     // Check if config file exists
     if !config.config_file.exists() {
-        log_error_msg(&format!("Configuration file not found: {}", config.config_file.display()));
+        error!(
+            "Configuration file not found: {}",
+            config.config_file.display()
+        );
         return Err(anyhow!("Configuration file not found"));
     }
 
     // Acquire lock to prevent concurrent runs
-    let lockfile = File::create(&config.lockfile)
-        .context("Failed to create lockfile")?;
+    let lockfile = File::create(&config.lockfile).context("Failed to create lockfile")?;
 
     if lockfile.try_lock_exclusive().is_err() {
-        log_error_msg("Another instance of update-packages is already running");
+        error!("Another instance of update-packages is already running");
         return Err(anyhow!("Another instance is already running"));
     }
 
-    log_info_msg("Starting package update process");
+    info!("Starting package update process");
 
     // Create temporary directory
-    let temp_dir = TempDir::new()
-        .context("Failed to create temporary directory")?;
+    let temp_dir = TempDir::new().context("Failed to create temporary directory")?;
 
     // Parse configuration
-    let urls = parse_packages_config(&config.config_file)
-        .context("Failed to parse configuration file")?;
+    let urls =
+        parse_packages_config(&config.config_file).context("Failed to parse configuration file")?;
 
     // Process each package
     let mut success_count = 0;
@@ -226,7 +247,7 @@ fn main() -> Result<()> {
         match process_package(&url, &config.pool_dir, temp_dir.path()) {
             Ok(_) => success_count += 1,
             Err(e) => {
-                log_warn_msg(&format!("Failed to process {}: {}", url, e));
+                warn!("Failed to process {}: {}", url, e);
                 failure_count += 1;
             }
         }
@@ -236,21 +257,21 @@ fn main() -> Result<()> {
     if success_count > 0 {
         match update_repository_metadata() {
             Ok(_) => {
-                log_info_msg(&format!(
+                info!(
                     "Repository update complete: {} successful, {} failed",
                     success_count, failure_count
-                ));
+                );
             }
             Err(e) => {
-                log_error_msg(&format!("Failed to update repository metadata: {}", e));
+                error!("Failed to update repository metadata: {}", e);
                 return Err(e);
             }
         }
     } else if failure_count > 0 {
-        log_warn_msg("No packages were successfully downloaded");
+        warn!("No packages were successfully downloaded");
         return Err(anyhow!("No packages were successfully downloaded"));
     } else {
-        log_info_msg("No packages configured or all packages disabled");
+        info!("No packages configured or all packages disabled");
     }
 
     // Lock will be automatically released when the file is dropped
