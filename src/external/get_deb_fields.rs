@@ -32,7 +32,7 @@ pub enum Error {
 /// variables.
 ///
 /// ```rust,no_run
-/// # use local_apt::get_deb_fields;
+/// # use local_apt::external::get_deb_fields;
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// let [name, version, arch] = get_deb_fields("package.deb", &["Package", "Version", "Architecture"])?;
 /// # Ok(())

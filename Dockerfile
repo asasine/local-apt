@@ -19,6 +19,7 @@ RUN apt-get update \
 COPY . .
 RUN --mount=type=cache,target=/build/sources/target \
     dpkg-buildpackage -b -uc -us
+
 RUN mkdir /dist && mv ../*.deb /dist/
 
 FROM scratch AS export
