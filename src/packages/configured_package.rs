@@ -45,7 +45,7 @@ impl ConfiguredPackage {
             get_deb_fields(&temp_file, &["Package", "Version", "Architecture"])
                 .map_err(|e| ProcessPackageError::InvalidDeb(InvalidDebError::Fields(e)))?;
 
-        let standard_debian_filename = format!("{}_{}__{}.deb", pkg_name, pkg_version, pkg_arch);
+        let standard_debian_filename = format!("{}_{}_{}.deb", pkg_name, pkg_version, pkg_arch);
         let target_dir = pool_dir
             .package_dir(&pkg_name)
             .ok_or(ProcessPackageError::InvalidDeb(InvalidDebError::NameEmpty))?;
