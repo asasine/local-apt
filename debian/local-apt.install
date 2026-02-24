@@ -1,1 +1,5 @@
-src/conffiles/packages.conf etc/local-apt/
+src/apt-ftparchive-conf/*.conf usr/share/local-apt/conf/
+src/packages.txt etc/local-apt/
+src/local.sources etc/apt/sources.list.d/
+src/bin/update-local-repo usr/bin/
+target/release/local-apt usr/bin/
