@@ -48,7 +48,7 @@ impl PoolDir {
         // each char is up to 4 bytes in UTF-8
         let mut buf = [0; 4];
         let first_letter_str = first_letter.encode_utf8(&mut buf);
-        Some(self.0.join(first_letter_str))
+        Some(self.0.join(first_letter_str).join(package_name))
     }
 }
 
