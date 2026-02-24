@@ -84,7 +84,7 @@ fn main() -> anyhow::Result<()> {
             let mut failure_count = 0;
 
             for package in packages.packages {
-                match package.process(&config.pool_dir, temp_dir.path()) {
+                match package.process(&config.pool_dir, &temp_dir) {
                     Ok(()) => success_count += 1,
                     Err(e) => {
                         warn!("Failed to process {:?}: {}", package, e);
