@@ -1,3 +1,9 @@
+local-apt (1.2.0) noble; urgency=medium
+
+  * Change main binary to local-apt 
+
+ -- Adam Sasine <asasine@users.noreply.github.com>  Tue, 24 Feb 2026 10:38:00 -0800
+
 local-apt (1.1.2) unstable; urgency=medium
 
   * Fix invalid package naming in the repository
