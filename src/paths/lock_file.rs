@@ -39,7 +39,7 @@ impl UnlockedLockFile {
     pub fn lock(self) -> Result<LockedLockFile, LockError> {
         let lock = File::create(&self.0.0).map_err(LockError::Create)?;
         if lock.try_lock_exclusive().is_err() {
-            error!("Another instance of update-packages is already running");
+            error!("Another instance of local-apt is already running");
             return Err(LockError::AlreadyLocked);
         }
 

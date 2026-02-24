@@ -31,7 +31,7 @@ Each line contains a URL to download:
 Download configured packages and update the repository:
 
 ```bash
-sudo update-packages
+sudo local-apt update
 ```
 
 The script will:
@@ -62,7 +62,7 @@ sudo update-local-repo
 ### Custom Configuration Location
 
 ```bash
-sudo LOCAL_APT_CONFIG=/path/to/custom.conf update-packages
+sudo LOCAL_APT_CONFIG=/path/to/custom.conf local-apt update
 ```
 
-See `man update-packages` and `man update-local-repo` for more details.
+See `man local-apt` and `man update-local-repo` for more details.

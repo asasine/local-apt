@@ -1,10 +1,10 @@
-.TH UPDATE-PACKAGES 8 "February 2026" "local-apt" "System Administration"
+.TH local-apt 8 "February 2026" "local-apt" "System Administration"
 .SH NAME
-update-packages \- download packages from configured sources and update local APT repository
+local-apt \- download packages from configured sources and update local APT repository
 .SH SYNOPSIS
-.B update-packages
+.B local-apt
 .SH DESCRIPTION
-.B update-packages
+.B local-apt
 downloads Debian package (.deb) files from URLs configured in
 .IR /etc/local-apt/packages.txt ,
 installs them into the local repository pool, and updates the repository
@@ -75,7 +75,7 @@ Download configured packages and update repository:
 .PP
 .RS
 .nf
-sudo update-packages
+sudo local-apt update
 .fi
 .RE
 .PP
@@ -83,7 +83,7 @@ Use an alternate configuration file:
 .PP
 .RS
 .nf
-sudo LOCAL_APT_CONFIG=/etc/local-apt/test-packages.txt update-packages
+sudo LOCAL_APT_CONFIG=/etc/local-apt/test-packages.txt local-apt update
 .fi
 .RE
 .SH CONFIGURATION
