@@ -17,7 +17,8 @@ RUN apt-get update \
 
 # Copy the rest of the source code to the build the binary package
 COPY . .
-RUN dpkg-buildpackage -b -uc -us
+RUN --mount=type=cache,target=/build/sources/target \
+    dpkg-buildpackage -b -uc -us
 RUN mkdir /dist && mv ../*.deb /dist/
 
 FROM scratch AS export

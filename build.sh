@@ -6,6 +6,10 @@ set -e
 OUTPUT_DIR="${1:-dist}"
 
 echo "Building package..."
-docker build --output="$OUTPUT_DIR" --target=export .
+DOCKER_BUILDKIT=1 docker build \
+  --output="$OUTPUT_DIR" \
+  --target=export \
+  --build-arg BUILDKIT_INLINE_CACHE=1 \
+  .
 
 echo "Build complete! Package(s) available in: $OUTPUT_DIR"
