@@ -1,7 +1,7 @@
 local-apt (1.1.2) unstable; urgency=medium
 
   * Fix invalid package naming in the repository
-  * Optimize update-local-repo to use apt-ftparchive generate 
+  * Optimize update-local-repo to use apt-ftparchive generate
 
  -- Adam Sasine <asasine@users.noreply.github.com>  Fri, 20 Feb 2026 22:44:13 -0800
 

@@ -1,12 +1,12 @@
 //! [`ConfiguredPackages`] contains all packages to be processed, parsed from the
 //! configuration file with [`from_config`][`ConfiguredPackages::from_config`].
 
-use crate::external::get_deb_fields;
+use crate::{external::get_deb_fields, paths::PoolDir};
 use anyhow::{Context, anyhow};
 use core::{error::Error, fmt::Display};
 use std::{
     fs::{self, File},
-    io::{self, BufRead, BufReader, Write},
+    io::Write,
     path::Path,
     process::Command,
 };
@@ -20,13 +20,13 @@ use tracing::info;
 pub struct ConfiguredPackage {
     /// The download URL for the ``.deb`` package. This should point directly to
     /// a `.deb` file.
-    url: String,
+    pub url: String,
 }
 
 impl ConfiguredPackage {
     /// Download the package to `temp_dir`, verify it, and move it to the appropriate
     /// location in `pool_dir`.
-    pub fn process(&self, pool_dir: &Path, temp_dir: &Path) -> anyhow::Result<()> {
+    pub fn process(&self, pool_dir: &PoolDir, temp_dir: &Path) -> anyhow::Result<()> {
         info!("Processing package from: {}", self.url);
 
         // Download to temp directory
@@ -45,8 +45,10 @@ impl ConfiguredPackage {
         let content = response
             .bytes()
             .context("Failed to read response content")?;
+
         file.write_all(&content)
             .context("Failed to write downloaded content")?;
+
         drop(file);
 
         // Verify it's a valid .deb file
@@ -71,11 +73,9 @@ impl ConfiguredPackage {
 
         // Auto-generate target path following Debian pool convention
         // pool/main/<first-letter>/<package-name>/
-        let first_letter = pkg_name
-            .chars()
-            .next()
-            .ok_or_else(|| anyhow!("Package name is empty"))?;
-        let target_dir = pool_dir.join(first_letter.to_string()).join(&pkg_name);
+        let target_dir = pool_dir
+            .package_dir(&pkg_name)
+            .ok_or_else(|| anyhow!("Package name is empty, cannot determine target directory"))?;
 
         // Create target directory if it doesn't exist
         fs::create_dir_all(&target_dir).context("Failed to create target directory")?;
@@ -97,16 +97,16 @@ impl ConfiguredPackage {
 
 /// All packages to be processed, parsed from the configuration file.
 pub struct ConfiguredPackages {
-    packages: Vec<ConfiguredPackage>,
+    pub packages: Vec<ConfiguredPackage>,
 }
 
 #[derive(Debug)]
 pub enum PackagesFromConfigError {
     /// The configuration file could not be found or opened.
-    ConfigFileNotFound(io::Error),
+    ConfigFileNotFound(std::io::Error),
 
     /// An error occurred while reading the configuration file.
-    ReadError(io::Error),
+    ReadError(std::io::Error),
 }
 
 impl Display for PackagesFromConfigError {
@@ -128,40 +128,5 @@ impl Error for PackagesFromConfigError {
             PackagesFromConfigError::ConfigFileNotFound(e) => Some(e),
             PackagesFromConfigError::ReadError(e) => Some(e),
         }
-    }
-}
-
-impl ConfiguredPackages {
-    /// Parse the configuration file and return a list of packages to process.
-    ///
-    /// The configuration file should contain one URL per line.
-    /// Lines starting with a `#` character are treated as comments and ignored.
-    pub fn from_config<P: AsRef<Path>>(config_file: P) -> Result<Self, PackagesFromConfigError> {
-        let file = File::open(config_file.as_ref())
-            .map_err(PackagesFromConfigError::ConfigFileNotFound)?;
-
-        let reader = BufReader::new(file);
-
-        let mut packages = Vec::new();
-
-        for line in reader.lines() {
-            let line = line.map_err(PackagesFromConfigError::ReadError)?;
-            let trimmed = line.trim();
-
-            // Skip empty lines and comments
-            if trimmed.is_empty() || trimmed.starts_with('#') {
-                continue;
-            }
-
-            packages.push(ConfiguredPackage {
-                url: trimmed.to_string(),
-            });
-        }
-
-        Ok(Self { packages })
-    }
-
-    pub const fn packages(&self) -> &[ConfiguredPackage] {
-        self.packages.as_slice()
     }
 }

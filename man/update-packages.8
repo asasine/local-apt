@@ -6,7 +6,7 @@ update-packages \- download packages from configured sources and update local AP
 .SH DESCRIPTION
 .B update-packages
 downloads Debian package (.deb) files from URLs configured in
-.IR /etc/local-apt/packages.conf ,
+.IR /etc/local-apt/packages.txt ,
 installs them into the local repository pool, and updates the repository
 metadata.
 .PP
@@ -51,7 +51,7 @@ If individual package downloads fail, the command continues processing
 remaining packages and updates the repository with partial progress.
 .SH FILES
 .TP
-.I /etc/local-apt/packages.conf
+.I /etc/local-apt/packages.txt
 TOML configuration file defining package sources
 .TP
 .I /var/lib/local-apt/pool/main/
@@ -83,7 +83,7 @@ Use an alternate configuration file:
 .PP
 .RS
 .nf
-sudo LOCAL_APT_CONFIG=/etc/local-apt/test-packages.conf update-packages
+sudo LOCAL_APT_CONFIG=/etc/local-apt/test-packages.txt update-packages
 .fi
 .RE
 .SH CONFIGURATION
