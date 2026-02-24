@@ -57,7 +57,7 @@ pub fn get_deb_fields<P: AsRef<Path>, const N: usize>(
 
     /// Extract the value from a line of the form `Field: value`
     fn extract_value(line: &str) -> Option<&str> {
-        line.splitn(2, ':').nth(1).map(|v| v.trim())
+        line.split_once(':').map(|(_, v)| v).map(|v| v.trim())
     }
 
     let values = fields

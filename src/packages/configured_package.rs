@@ -1,3 +1,5 @@
+//! [`ConfiguredPackage`] represents a single package to be processed.
+
 use crate::{
     external::{GetDebFieldsError, get_deb_fields},
     paths::PoolDir,
@@ -82,6 +84,9 @@ impl ConfiguredPackage {
     }
 }
 
+/// Errors that can occur when processing a package.
+///
+/// See [`ConfiguredPackage::process`] for details.
 #[derive(Debug)]
 pub enum ProcessPackageError {
     DownloadFailed(DownloadError),
@@ -111,6 +116,9 @@ impl core::error::Error for ProcessPackageError {
     }
 }
 
+/// Errors that can occur when downloading a package.
+///
+/// See [`ConfiguredPackage::process`] for details.
 #[derive(Debug)]
 pub enum DownloadError {
     RequestFailed(reqwest::Error),
@@ -144,6 +152,9 @@ impl core::error::Error for DownloadError {
     }
 }
 
+/// Errors that can occur when validating a deb file and extracting metadata from it.
+///
+/// See [`ConfiguredPackage::process`] for details.
 #[derive(Debug)]
 pub enum InvalidDebError {
     Fields(GetDebFieldsError),

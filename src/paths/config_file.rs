@@ -7,7 +7,7 @@ use std::{
     path::PathBuf,
 };
 
-use crate::packages::{ConfiguredPackage, ConfiguredPackages, PackagesFromConfigError};
+use crate::packages::{ConfiguredPackage, ConfiguredPackages};
 
 /// The configuration file which lists package sources to download from.
 #[derive(Debug)]
@@ -35,16 +35,15 @@ impl ConfigFile {
     ///
     /// The configuration file should contain one URL per line.
     /// Lines starting with a `#` character are treated as comments and ignored.
-    pub fn read_packages(&self) -> Result<ConfiguredPackages, PackagesFromConfigError> {
-        let file =
-            File::open(self.0.as_path()).map_err(PackagesFromConfigError::ConfigFileNotFound)?;
+    pub fn read_packages(&self) -> Result<ConfiguredPackages, ReadPackagesError> {
+        let file = File::open(self.0.as_path()).map_err(ReadPackagesError::ConfigFileNotFound)?;
 
         let reader = BufReader::new(file);
 
         let mut packages = Vec::new();
 
         for line in reader.lines() {
-            let line = line.map_err(PackagesFromConfigError::ReadError)?;
+            let line = line.map_err(ReadPackagesError::ReadError)?;
             let trimmed = line.trim();
 
             // Skip empty lines and comments
@@ -71,4 +70,38 @@ impl Display for ConfigFile {
 fn is_absolute_path(path: impl Into<PathBuf>) -> Option<PathBuf> {
     let path = path.into();
     if path.is_absolute() { Some(path) } else { None }
+}
+
+/// Errors that can occur when reading the configuration file.
+///
+/// See [`ConfigFile::read_packages`] for details.
+#[derive(Debug)]
+pub enum ReadPackagesError {
+    /// The configuration file could not be found or opened.
+    ConfigFileNotFound(std::io::Error),
+
+    /// An error occurred while reading the configuration file.
+    ReadError(std::io::Error),
+}
+
+impl Display for ReadPackagesError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ReadPackagesError::ConfigFileNotFound(e) => {
+                write!(f, "Configuration file not found: {}", e)
+            }
+            ReadPackagesError::ReadError(e) => {
+                write!(f, "Failed to read configuration: {}", e)
+            }
+        }
+    }
+}
+
+impl core::error::Error for ReadPackagesError {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
+        match self {
+            ReadPackagesError::ConfigFileNotFound(e) => Some(e),
+            ReadPackagesError::ReadError(e) => Some(e),
+        }
+    }
 }
