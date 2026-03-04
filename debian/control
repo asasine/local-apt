@@ -10,7 +10,7 @@ Vcs-Browser: https://github.com/asasine/local-apt
 
 Package: local-apt
 Architecture: any
-Depends: ${misc:Depends}, apt-utils, wget
+Depends: ${misc:Depends}, apt-utils, dpkg
 Description: Create and manage local APT repositories
  Local APT allows you to create your own local APT repository from
  HTTP downloads. It provides utilities to download packages and generate
