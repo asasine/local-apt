@@ -2,7 +2,7 @@ Source: local-apt
 Section: admin
 Priority: optional
 Maintainer: Adam Sasine <asasine@users.noreply.github.com>
-Build-Depends: debhelper-compat (= 13)
+Build-Depends: debhelper-compat (= 13), go-md2man
 Standards-Version: 4.6.0
 Homepage: https://github.com/asasine/local-apt
 Vcs-Git: https://github.com/asasine/local-apt.git

@@ -1,10 +1,29 @@
 #!/usr/bin/make -f
+
+# --- Variables ---
+MAN_DIR := target/man
+
+# To add new man pages, append the filename to this list
+MAN_PAGES := local-apt.8 packages.txt.5
+
+# --- debhelper ---
 %:
 	dh $@
 
-# Run cargo build in addition to the normal build steps
 override_dh_auto_build:
 	cargo build --release
 
 override_dh_auto_test:
 	cargo test --release
+
+execute_before_dh_installman: man
+
+# --- man pages ---
+$(MAN_DIR)/%: install/man/%.md | $(MAN_DIR)
+	go-md2man -in $< -out $@
+
+$(MAN_DIR):
+	mkdir -p $@
+
+.PHONY: man
+man: $(addprefix $(MAN_DIR)/,$(MAN_PAGES))
