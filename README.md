@@ -47,22 +47,3 @@ Install packages from your local repository:
 sudo apt update
 sudo apt install discord
 ```
-
-## Manual Repository Management
-
-You can also manually add packages and regenerate metadata:
-
-```bash
-sudo cp my-package.deb /var/lib/local-apt/pool/main/m/my-package/
-sudo update-local-repo
-```
-
-## Advanced
-
-### Custom Configuration Location
-
-```bash
-sudo LOCAL_APT_CONFIG=/path/to/custom.conf local-apt update
-```
-
-See `man local-apt` and `man update-local-repo` for more details.

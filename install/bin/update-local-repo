@@ -1,4 +1,0 @@
-#!/bin/bash
-cd /var/lib/local-apt/
-mkdir -p dists/stable/main/binary-amd64
-apt-ftparchive -c /usr/share/local-apt/conf/apt.conf generate /usr/share/local-apt/conf/tree.conf

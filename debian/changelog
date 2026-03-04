@@ -1,6 +1,14 @@
+local-apt (1.3.0) noble; urgency=medium
+
+  * Remove update-local-repo binary
+  * Add update-repo -d|--repository-directory <PATH> option to run with a
+    custom directory
+
+ -- Adam Sasine <asasine@users.noreply.github.com>  Tue, 03 Mar 2026 20:39:48 -0800
+
 local-apt (1.2.0) noble; urgency=medium
 
-  * Change main binary to local-apt 
+  * Change main binary to local-apt
 
  -- Adam Sasine <asasine@users.noreply.github.com>  Tue, 24 Feb 2026 10:38:00 -0800
 
@@ -11,7 +19,7 @@ local-apt (1.1.2) unstable; urgency=medium
 
  -- Adam Sasine <asasine@users.noreply.github.com>  Fri, 20 Feb 2026 22:44:13 -0800
 
-local-apt (1.1.0-1) unstable; urgency=medium
+local-apt (1.1.0) unstable; urgency=medium
 
   * Add configurable package sources via simple text configuration
   * Replace update-discord-repo with update-packages
@@ -22,7 +30,7 @@ local-apt (1.1.0-1) unstable; urgency=medium
 
  -- Adam Sasine <asasine@users.noreply.github.com>  Thu, 20 Feb 2026 22:00:00 +0000
 
-local-apt (1.0.0-1) unstable; urgency=medium
+local-apt (1.0.0) unstable; urgency=medium
 
   * Initial Debian package release
   * Includes update-local-repo and update-discord-repo utilities

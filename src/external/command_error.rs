@@ -30,3 +30,9 @@ impl core::error::Error for Error {
         }
     }
 }
+
+impl From<std::io::Error> for Error {
+    fn from(e: std::io::Error) -> Self {
+        Error::Spawn(e)
+    }
+}

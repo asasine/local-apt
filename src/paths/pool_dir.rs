@@ -12,23 +12,14 @@ use std::path::{Path, PathBuf};
 pub struct PoolDir(PathBuf);
 
 impl PoolDir {
-    /// Create a new [`PoolDir`] with the given path.
-    ///
-    /// The path should point to the component's pool directory (e.g., `/var/lib/local-apt/pool/main`),
-    /// not a package-specific subdirectory.
-    ///
-    /// - To use the standard apt-ftparchive structure, see [`from_apt_ftparchive_structure`][`Self::from_apt_ftparchive_structure`].
-    /// - To use the default pool directory for this [`crate`], use [`PoolDir::default`].
-    pub fn new<P: AsRef<Path>>(path: P) -> Self {
-        PoolDir(path.as_ref().to_path_buf())
-    }
+    /// The default component for the pool directory is `main`.
+    pub const COMPONENT: &'static str = "main";
 
     /// Create a [`PoolDir`] from the standard apt-ftparchive structure.
     ///
     /// This assumes the pool directory is located at `{repo_dir}/pool/{component}`.
     /// `component` is typically `main`, `contrib`, or `non-free`.
     ///
-    /// - To use a completely custom path, use [`PoolDir::new`].
     /// - To use the default pool directory for this [`crate`], use [`PoolDir::default`].
     pub fn from_apt_ftparchive_structure<R: AsRef<Path>, C: AsRef<Path>>(
         repo_dir: R,
@@ -45,10 +36,19 @@ impl PoolDir {
         let first_letter = package_name.chars().next()?.to_ascii_lowercase();
 
         // avoid allocating a new String by encoding the char into a stack buffer
-        // each char is up to 4 bytes in UTF-8
+        // each char is at most 4 bytes in UTF-8
         let mut buf = [0; 4];
         let first_letter_str = first_letter.encode_utf8(&mut buf);
         Some(self.0.join(first_letter_str).join(package_name))
+    }
+
+    /// Get the path to the root of the repository.
+    ///
+    /// In standard APT repository structure, this is the parent of the `pool` directory.
+    /// For the default pool directory (`/var/lib/local-apt/pool/main`), this would return `/var/lib/local-apt`.
+    pub fn repo_dir(&self) -> &Path {
+        // PANIC SAFETY: all public constructors ensure the path has at least two components: "pool/{component}"
+        &self.0.parent().unwrap().parent().unwrap()
     }
 }
 
@@ -56,8 +56,7 @@ impl Default for PoolDir {
     /// The default pool directory follows the apt-ftparchive structure at `/var/lib/local-apt/pool/main`.
     ///
     /// - To use a different component (e.g., `contrib` or `non-free`), use [`from_apt_ftparchive_structure`][`Self::from_apt_ftparchive_structure`] instead.
-    /// - To use a completely custom path, use [`PoolDir::new`].
     fn default() -> Self {
-        PoolDir::from_apt_ftparchive_structure("/var/lib/local-apt", "main")
+        PoolDir::from_apt_ftparchive_structure("/var/lib/local-apt", Self::COMPONENT)
     }
 }

@@ -57,7 +57,10 @@ fn main() -> anyhow::Result<()> {
     match args {
         Cli::Update(update_args) => {
             info!("Running update command with args: {:?}", update_args);
-            let config = Config::default();
+            let config = Config {
+                pool_dir: update_args.pool_dir(),
+                ..Default::default()
+            };
 
             // Check if config file exists
             if !config.config_file.exists() {
@@ -95,7 +98,7 @@ fn main() -> anyhow::Result<()> {
 
             // Update repository metadata if any packages succeeded
             if success_count > 0 {
-                match update_repository_metadata() {
+                match update_repository_metadata(config.pool_dir.repo_dir()) {
                     Ok(()) => {
                         info!(
                             "Repository update complete: {} successful, {} failed",

@@ -12,9 +12,9 @@ metadata.
 .PP
 The command parses the TOML configuration file, downloads each enabled
 package, extracts package metadata, automatically determines the correct
-pool directory path following Debian conventions, and calls
-.BR update-local-repo (8)
-to regenerate repository metadata.
+pool directory path following Debian conventions, and regenerates
+repository metadata using
+.BR apt-ftparchive (1).
 .PP
 The command performs the following operations:
 .IP \(bu 2
@@ -41,9 +41,8 @@ Auto-generates the target path following Debian pool convention
 Moves the package to the appropriate directory
 .RE
 .IP \(bu 2
-Calls
-.BR update-local-repo (8)
-to regenerate repository metadata
+Regenerates repository metadata using
+.BR apt-ftparchive (1)
 .IP \(bu 2
 Logs all operations to syslog
 .PP
@@ -111,7 +110,6 @@ All operations are logged to syslog with the
 .B local-apt
 tag. Messages are also written to stdout/stderr.
 .SH SEE ALSO
-.BR update-local-repo (8),
+.BR apt-ftparchive (1),
 .BR dpkg-deb (1),
-.BR wget (1),
 .BR flock (1)

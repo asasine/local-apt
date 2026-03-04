@@ -1,5 +1,4 @@
 install/apt-ftparchive-conf/*.conf usr/share/local-apt/conf/
 install/packages.txt etc/local-apt/
 install/local.sources etc/apt/sources.list.d/
-install/bin/update-local-repo usr/bin/
 target/release/local-apt usr/bin/
