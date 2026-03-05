@@ -1,1 +1,1 @@
-Before making changes, read the [docs](../docs/README.md) directory, especially [ARCHITECTURE.md](../docs/ARCHITECTURE.md), to understand the project structure, conventions, and high-level flow.
+Before making changes, read the [docs](../docs/README.md) and subsequent documentation in that directory based on the type of change.
