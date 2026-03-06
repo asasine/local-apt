@@ -48,7 +48,7 @@ impl PoolDir {
     /// For the default pool directory (`/var/lib/local-apt/pool/main`), this would return `/var/lib/local-apt`.
     pub fn repo_dir(&self) -> &Path {
         // PANIC SAFETY: all public constructors ensure the path has at least two components: "pool/{component}"
-        &self.0.parent().unwrap().parent().unwrap()
+        self.0.parent().unwrap().parent().unwrap()
     }
 }
 

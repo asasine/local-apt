@@ -1,0 +1,55 @@
+name: Tag release
+
+on:
+    workflow_dispatch:
+        inputs:
+            version:
+                description: "Version number (e.g. 1.4.0)"
+                required: true
+                type: string
+
+jobs:
+    tag:
+        name: Tag release
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+        steps:
+            - name: Validate version
+              run: |
+                  if ! echo "${{ inputs.version }}" | grep -Pq '^\d+\.\d+\.\d+(~[a-z0-9.]+)?$'; then
+                      echo "::error::Invalid version '${{ inputs.version }}'. Expected format: X.Y.Z or X.Y.Z~suffix"
+                      exit 1
+                  fi
+
+            - uses: actions/checkout@v4
+              with:
+                  ref: main
+                  token: ${{ secrets.APP_PRIVATE_KEY }}
+
+            - name: Install dependencies
+              run: sudo apt-get update && sudo apt-get install -y devscripts dpkg-dev
+
+            - name: Configure git
+              run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+            - name: Finalize changelog
+              run: |
+                  dch --controlmaint --newversion "${{ inputs.version }}" ''
+                  dch --controlmaint --release ''
+
+            - name: Update Cargo.toml version
+              run: |
+                  cargo_version="${{ inputs.version }}"
+                  cargo_version="${cargo_version//\~/-}"
+                  sed -i "s/^version = \".*\"/version = \"$cargo_version\"/" Cargo.toml
+                  cargo update local-apt
+
+            - name: Commit and tag
+              run: |
+                  git add debian/changelog Cargo.toml Cargo.lock
+                  git commit -m "Release v${{ inputs.version }}"
+                  git tag "v${{ inputs.version }}"
+                  git push origin main "v${{ inputs.version }}"
