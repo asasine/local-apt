@@ -42,6 +42,7 @@ jobs:
 
             - name: Attest build provenance
               uses: actions/attest-build-provenance@v2
+              if: ${{ !github.event.repository.private }}
               with:
                   subject-path: dist/*.deb
 
