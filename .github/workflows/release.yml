@@ -3,6 +3,12 @@ name: Release
 on:
     push:
         tags: ["v*"]
+    workflow_dispatch:
+        inputs:
+            tag:
+                description: "Tag to release (e.g. v1.4.0)"
+                required: true
+                type: string
 
 jobs:
     ci:
@@ -19,6 +25,8 @@ jobs:
             attestations: write
         steps:
             - uses: actions/checkout@v4
+              with:
+                  ref: ${{ inputs.tag || github.ref }}
 
             - uses: docker/setup-buildx-action@v3
 
@@ -49,5 +57,6 @@ jobs:
             - name: Create GitHub Release
               uses: softprops/action-gh-release@v2
               with:
+                  tag_name: ${{ inputs.tag || github.ref_name }}
                   body: ${{ steps.changelog.outputs.body }}
                   files: dist/*.deb
