@@ -41,7 +41,9 @@ jobs:
 
             - name: Update Cargo.toml version
               run: |
-                  sed -i "s/^version = \".*\"/version = \"${{ inputs.version }}\"/" Cargo.toml
+                  cargo_version="${{ inputs.version }}"
+                  cargo_version="${cargo_version//\~/-}"
+                  sed -i "s/^version = \".*\"/version = \"$cargo_version\"/" Cargo.toml
 
             - name: Commit and tag
               run: |
