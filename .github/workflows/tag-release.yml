@@ -29,7 +29,8 @@ jobs:
 
             - name: Finalize changelog
               run: |
-                  dch --newversion "${{ inputs.version }}" --distribution noble --release ""
+                  dch --controlmaint --newversion "${{ inputs.version }}" ''
+                  dch --controlmaint --release ''
 
             - name: Update Cargo.toml version
               run: |
