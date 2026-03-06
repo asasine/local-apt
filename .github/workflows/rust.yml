@@ -18,6 +18,8 @@ jobs:
             - uses: actions/checkout@v4
             - uses: dtolnay/rust-toolchain@stable
             - uses: Swatinem/rust-cache@v2
+              with:
+                  shared-key: cargo
             - run: cargo check
 
     test:
@@ -27,6 +29,9 @@ jobs:
             - uses: actions/checkout@v4
             - uses: dtolnay/rust-toolchain@stable
             - uses: Swatinem/rust-cache@v2
+              with:
+                  shared-key: cargo
+                  save-if: false
             - run: cargo test
 
     fmt:
@@ -48,4 +53,7 @@ jobs:
               with:
                   components: clippy
             - uses: Swatinem/rust-cache@v2
+              with:
+                  shared-key: cargo
+                  save-if: false
             - run: cargo clippy -- -D warnings
