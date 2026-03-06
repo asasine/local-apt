@@ -15,6 +15,13 @@ jobs:
         permissions:
             contents: write
         steps:
+            - name: Validate version
+              run: |
+                  if ! echo "${{ inputs.version }}" | grep -Pq '^\d+\.\d+\.\d+(~[a-z0-9.]+)?$'; then
+                      echo "::error::Invalid version '${{ inputs.version }}'. Expected format: X.Y.Z or X.Y.Z~suffix"
+                      exit 1
+                  fi
+
             - uses: actions/checkout@v4
               with:
                   ref: main
