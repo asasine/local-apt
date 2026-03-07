@@ -70,7 +70,18 @@ fn main() -> anyhow::Result<()> {
             }
 
             // Acquire lock to prevent concurrent runs, will automatically release when dropped
-            let _lock = config.lockfile.lock()?;
+            let _lock = match config.lockfile.lock() {
+                Ok(lock) => Some(lock),
+                Err(local_apt::paths::LockError::PermissionDenied(e)) => {
+                    info!(
+                        "Could not acquire lock file (permission denied: {}), proceeding without lock",
+                        e
+                    );
+
+                    None
+                }
+                Err(e) => return Err(e.into()),
+            };
 
             info!("Starting package update process");
 
@@ -128,7 +139,9 @@ fn main() -> anyhow::Result<()> {
                 warn!("No packages were successfully downloaded");
                 return Err(anyhow!("No packages were successfully downloaded"));
             } else {
-                info!("No packages configured or all packages disabled");
+                info!(
+                    "No packages configured, all packages disabled, or all packages already up-to-date"
+                );
             }
 
             // Lock will be automatically released when the file is dropped

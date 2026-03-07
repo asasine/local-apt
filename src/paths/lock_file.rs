@@ -36,8 +36,16 @@ impl UnlockedLockFile {
     ///
     /// If successful, returns a [`LockedLockFile`] that holds the lock until dropped.
     /// If another instance is already running and holds the lock, returns an error.
+    /// If the file cannot be created or accessed due to permissions, returns an error.
     pub fn lock(self) -> Result<LockedLockFile, LockError> {
-        let lock = File::create(&self.0.0).map_err(LockError::Create)?;
+        let lock = File::create(&self.0.0).map_err(|e| {
+            if e.kind() == std::io::ErrorKind::PermissionDenied {
+                LockError::PermissionDenied(e)
+            } else {
+                LockError::Create(e)
+            }
+        })?;
+
         if lock.try_lock_exclusive().is_err() {
             error!("Another instance of local-apt is already running");
             return Err(LockError::AlreadyLocked);
@@ -106,6 +114,9 @@ pub enum LockError {
     /// Failed to create the lock file.
     Create(std::io::Error),
 
+    /// Insufficient permissions to create or write to the lock file.
+    PermissionDenied(std::io::Error),
+
     /// Failed to acquire an exclusive lock on the file.
     AlreadyLocked,
 }
@@ -114,6 +125,7 @@ impl Display for LockError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             LockError::Create(e) => write!(f, "Failed to create lock file: {}", e),
+            LockError::PermissionDenied(e) => write!(f, "Permission denied on lock file: {}", e),
             LockError::AlreadyLocked => write!(f, "Another instance is already running"),
         }
     }
@@ -123,6 +135,7 @@ impl core::error::Error for LockError {
     fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
         match self {
             LockError::Create(e) => Some(e),
+            LockError::PermissionDenied(e) => Some(e),
             LockError::AlreadyLocked => None,
         }
     }
