@@ -15,7 +15,7 @@ impl Args {
     pub fn state_dir(&self) -> StateDir {
         self.repository_directory
             .as_ref()
-            .map(|dir| StateDir::new(dir))
+            .map(StateDir::new)
             .unwrap_or_default()
     }
 }
