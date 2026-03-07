@@ -1,5 +1,6 @@
 //! [`ConfiguredPackage`] represents a single package to be processed.
 
+use super::UrlTimestamps;
 use crate::{
     external::{GetDebFieldsError, get_deb_fields},
     paths::PoolDir,
@@ -39,24 +40,50 @@ pub enum ConfiguredPackage {
     },
 }
 
+/// The outcome of processing a package.
+///
+/// See [`ConfiguredPackage::process`] for details.
+pub enum ProcessResult {
+    /// The package was downloaded and installed into the pool.
+    Downloaded,
+
+    /// The package was already up-to-date (HTTP 304 Not Modified).
+    AlreadyUpToDate,
+}
+
 impl ConfiguredPackage {
     /// Download the package to `temp_dir`, verify it, and move it to the appropriate
     /// location in `pool_dir`.
+    ///
+    /// Uses `url_timestamps` to send conditional HTTP requests (`If-Modified-Since`)
+    /// and avoid re-downloading packages that haven't changed.
     pub fn process<T: AsRef<Path>>(
         &self,
         pool_dir: &PoolDir,
         temp_dir: T,
-    ) -> Result<(), ProcessPackageError> {
+        url_timestamps: &mut UrlTimestamps,
+    ) -> Result<ProcessResult, ProcessPackageError> {
         let download_url = self
             .resolve_download_url()
             .map_err(ProcessPackageError::DownloadFailed)?;
 
         info!("Processing package from: {}", download_url);
+        let if_modified_since = url_timestamps.get_if_modified_since(&download_url);
+
         let temp_file = temp_dir
             .as_ref()
             .join(format!("package-{}.deb", std::process::id()));
 
-        download_to(&download_url, &temp_file).map_err(ProcessPackageError::DownloadFailed)?;
+        let download_result = download_to(&download_url, &temp_file, if_modified_since.as_deref())
+            .map_err(ProcessPackageError::DownloadFailed)?;
+
+        let last_modified = match download_result {
+            DownloadResult::NotModified => {
+                info!("Package already up-to-date: {}", download_url);
+                return Ok(ProcessResult::AlreadyUpToDate);
+            }
+            DownloadResult::Downloaded { last_modified } => last_modified,
+        };
 
         // Extract package metadata to move to correct location in the pool
         // This also validates that the deb file is well-formed
@@ -74,13 +101,15 @@ impl ConfiguredPackage {
         let target_path = target_dir.join(&standard_debian_filename);
         fs::rename(&temp_file, &target_path).map_err(ProcessPackageError::IoError)?;
 
+        url_timestamps.set(download_url, target_path.clone(), last_modified.as_deref());
+
         info!(
             "Successfully installed {} to {}",
             standard_debian_filename,
             target_path.display()
         );
 
-        Ok(())
+        Ok(ProcessResult::Downloaded)
     }
 
     /// Resolve the download URL for this package source.
@@ -145,25 +174,53 @@ fn http_client() -> reqwest::blocking::Client {
         .expect("failed to build HTTP client")
 }
 
+/// The result of a download attempt, distinguishing between a successful download
+/// and a server-indicated "not modified" response.
+enum DownloadResult {
+    /// The server responded with `304 Not Modified`.
+    NotModified,
+
+    /// The file was downloaded. Contains the `Last-Modified` header value if present.
+    Downloaded { last_modified: Option<String> },
+}
+
 /// Download a URL to the specified path.
-// TODO: timestamping to avoid redownloading if the same package already exists
-// in the pool and shares a timestamp with the source (e.g., from HTTP headers)
-fn download_to<P: AsRef<Path>>(url: &str, path: P) -> Result<(), DownloadError> {
-    let mut response = http_client()
-        .get(url)
-        .send()
-        .map_err(DownloadError::RequestFailed)?;
+///
+/// If `if_modified_since` is provided, it is sent as the `If-Modified-Since` header.
+/// If the server responds with `304 Not Modified`, [`DownloadResult::NotModified`] is
+/// returned.
+fn download_to<P: AsRef<Path>>(
+    url: &str,
+    path: P,
+    if_modified_since: Option<&str>,
+) -> Result<DownloadResult, DownloadError> {
+    let mut request = http_client().get(url);
+    if let Some(since) = if_modified_since {
+        request = request.header("If-Modified-Since", since);
+    }
+
+    let mut response = request.send().map_err(DownloadError::RequestFailed)?;
 
     let status = response.status();
+    if status == reqwest::StatusCode::NOT_MODIFIED {
+        return Ok(DownloadResult::NotModified);
+    }
+
     if !status.is_success() {
         return Err(DownloadError::RequestNotSuccessful(status));
     }
+
+    let last_modified = response
+        .headers()
+        .get("Last-Modified")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
 
     let file = File::create(path).map_err(DownloadError::IoError)?;
     let mut file = std::io::BufWriter::new(file);
     let bytes_written = io::copy(&mut response, &mut file).map_err(DownloadError::IoError)?;
     debug!("Downloaded {} bytes from {}", bytes_written, url);
-    Ok(())
+    Ok(DownloadResult::Downloaded { last_modified })
 }
 
 #[derive(serde::Deserialize)]

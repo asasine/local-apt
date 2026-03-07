@@ -3,24 +3,25 @@ use clap::Parser;
 use local_apt::{
     cli::Cli,
     external::update_repository_metadata,
-    paths::{ConfigFile, PoolDir, UnlockedLockFile},
+    packages::{ProcessResult, UrlTimestamps},
+    paths::{ConfigFile, StateDir, UnlockedLockFile},
 };
 use syslog_tracing::{Facility, Options, Syslog};
 use tempfile::TempDir;
 use tracing::{error, info, warn};
 use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::SubscriberInitExt};
 
-struct Config {
+struct Paths {
     config_file: ConfigFile,
-    pool_dir: PoolDir,
+    state_dir: StateDir,
     lockfile: UnlockedLockFile,
 }
 
-impl Default for Config {
+impl Default for Paths {
     fn default() -> Self {
-        Config {
+        Paths {
             config_file: ConfigFile::env_or_default(),
-            pool_dir: PoolDir::default(),
+            state_dir: StateDir::default(),
             lockfile: UnlockedLockFile::default(),
         }
     }
@@ -57,8 +58,8 @@ fn main() -> anyhow::Result<()> {
     match args {
         Cli::Update(update_args) => {
             info!("Running update command with args: {:?}", update_args);
-            let config = Config {
-                pool_dir: update_args.pool_dir(),
+            let config = Paths {
+                state_dir: update_args.state_dir(),
                 ..Default::default()
             };
 
@@ -76,6 +77,12 @@ fn main() -> anyhow::Result<()> {
             // Create temporary directory
             let temp_dir = TempDir::new().context("Failed to create temporary directory")?;
 
+            // Load URL timestamps mapping for conditional downloads
+            let mut url_timestamps = UrlTimestamps::load(config.state_dir.url_timestamps_path())
+                .context("Failed to load URL timestamps mapping")?;
+
+            let pool_dir = config.state_dir.pool_dir();
+
             // Parse configuration
             let packages = config
                 .config_file
@@ -84,11 +91,13 @@ fn main() -> anyhow::Result<()> {
 
             // Process each package
             let mut success_count = 0;
+            let mut up_to_date_count = 0;
             let mut failure_count = 0;
 
             for package in packages.packages {
-                match package.process(&config.pool_dir, &temp_dir) {
-                    Ok(()) => success_count += 1,
+                match package.process(&pool_dir, &temp_dir, &mut url_timestamps) {
+                    Ok(ProcessResult::Downloaded) => success_count += 1,
+                    Ok(ProcessResult::AlreadyUpToDate) => up_to_date_count += 1,
                     Err(e) => {
                         warn!("Failed to process {:?}: {}", package, e);
                         failure_count += 1;
@@ -96,13 +105,18 @@ fn main() -> anyhow::Result<()> {
                 }
             }
 
+            // Save URL timestamps mapping
+            if let Err(e) = url_timestamps.save() {
+                warn!("Failed to save URL timestamps mapping: {}", e);
+            }
+
             // Update repository metadata if any packages succeeded
             if success_count > 0 {
-                match update_repository_metadata(config.pool_dir.repo_dir()) {
+                match update_repository_metadata(config.state_dir.path()) {
                     Ok(()) => {
                         info!(
-                            "Repository update complete: {} successful, {} failed",
-                            success_count, failure_count
+                            "Repository update complete: {} downloaded, {} up-to-date, {} failed",
+                            success_count, up_to_date_count, failure_count
                         );
                     }
                     Err(e) => {
