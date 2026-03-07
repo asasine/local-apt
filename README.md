@@ -10,21 +10,31 @@ sudo ./install.bash
 
 ## Configuration
 
-After installation, configure your package sources in `/etc/local-apt/packages.txt`:
+After installation, configure your package sources in `/etc/local-apt/packages.toml`:
 
+```toml
+# Each [[package]] entry defines a package source
+
+# Direct URL
+[[package]]
+type = "url"
+url = "https://discord.com/api/download?platform=linux&format=deb"
+
+# GitHub Release
+[[package]]
+type = "github-release"
+repo = "BurntSushi/ripgrep"
+asset_pattern = "ripgrep_.+_amd64\\.deb$"
 ```
-# Lines starting with # are comments
-# One URL per line
 
-https://discord.com/api/download?platform=linux&format=deb
-```
+Each `[[package]]` entry defines a package to download. The **type** field selects the source:
 
-Each line contains a URL to download:
-
-- One URL per line
-- Lines starting with `#` are comments
-- To disable a package, comment it out with `#`
-- Package name is automatically extracted from the downloaded .deb file
+- `"url"` — Direct download URL to a `.deb` file
+  - **url**: The download URL
+- `"github-release"` — `.deb` asset from the latest GitHub Release
+  - **repo**: GitHub repository in `owner/repo` format
+  - **asset_pattern**: Regex matched against asset filenames
+- To disable a package, comment out its entry with `#`
 
 ## Usage
 

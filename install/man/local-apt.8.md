@@ -11,7 +11,7 @@ local-apt - download packages from configured sources and update local APT repos
 ## DESCRIPTION
 
 **local-apt** downloads Debian package (.deb) files from URLs configured in
-_/etc/local-apt/packages.txt_, installs them into the local repository pool,
+_/etc/local-apt/packages.toml_, installs them into the local repository pool,
 and updates the repository metadata.
 
 The command parses the TOML configuration file, downloads each enabled
@@ -38,7 +38,7 @@ remaining packages and updates the repository with partial progress.
 
 ## FILES
 
-_/etc/local-apt/packages.txt_
+_/etc/local-apt/packages.toml_
 : TOML configuration file defining package sources
 
 _/var/lib/local-apt/pool/main/_
@@ -71,22 +71,30 @@ sudo local-apt update
 Use an alternate configuration file:
 
 ```bash
-sudo LOCAL_APT_CONFIG=/etc/local-apt/test-packages.txt local-apt update
+sudo LOCAL_APT_CONFIG=/etc/local-apt/test-packages.toml local-apt update
 ```
 
 ## CONFIGURATION
 
-The configuration file uses a simple text format with one URL per line.
+The configuration file uses TOML format with **\[\[package\]\]** entries.
+Each entry requires a **type** field to specify the source type, along with
+type-specific fields.
 
-Lines starting with **#** are treated as comments and ignored.
-Empty lines are also ignored.
-To disable a package, comment out its line.
+To disable a package, comment out its entry with **#**.
 
 Example configuration:
 
-```ini
-# Discord package
-https://discord.com/api/download?platform=linux&format=deb
+```toml
+# Discord (direct URL)
+[[package]]
+type = "url"
+url = "https://discord.com/api/download?platform=linux&format=deb"
+
+# ripgrep (GitHub Release)
+[[package]]
+type = "github-release"
+repo = "BurntSushi/ripgrep"
+asset_pattern = "ripgrep_.+_amd64\\.deb$"
 ```
 
 ## LOGGING
@@ -96,4 +104,4 @@ Messages are also written to stdout/stderr.
 
 ## SEE ALSO
 
-**packages.txt**(5), **apt-ftparchive**(1), **dpkg-deb**(1), **flock**(1)
+**packages.toml**(5), **apt-ftparchive**(1), **dpkg-deb**(1), **flock**(1)
