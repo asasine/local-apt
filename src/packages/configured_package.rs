@@ -16,7 +16,7 @@ use tracing::{debug, info};
 ///
 /// This object is parsed from the configuration file. It contains information to
 /// download and process the package.
-#[derive(Debug)]
+#[derive(Debug, serde::Deserialize)]
 pub struct ConfiguredPackage {
     /// The download URL for the `.deb` package. This should point directly to a
     /// `.deb` file.

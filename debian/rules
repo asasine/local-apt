@@ -4,7 +4,7 @@
 MAN_DIR := target/man
 
 # To add new man pages, append the filename to this list
-MAN_PAGES := local-apt.8 packages.txt.5
+MAN_PAGES := local-apt.8 packages.toml.5
 
 # --- debhelper ---
 %:

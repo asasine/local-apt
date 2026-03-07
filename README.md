@@ -10,20 +10,19 @@ sudo ./install.bash
 
 ## Configuration
 
-After installation, configure your package sources in `/etc/local-apt/packages.txt`:
+After installation, configure your package sources in `/etc/local-apt/packages.toml`:
 
+```toml
+# Each [[package]] entry defines a package source
+
+[[package]]
+url = "https://discord.com/api/download?platform=linux&format=deb"
 ```
-# Lines starting with # are comments
-# One URL per line
 
-https://discord.com/api/download?platform=linux&format=deb
-```
+Each `[[package]]` entry defines a package to download:
 
-Each line contains a URL to download:
-
-- One URL per line
-- Lines starting with `#` are comments
-- To disable a package, comment it out with `#`
+- **url**: Direct download URL to a `.deb` file
+- To disable a package, comment out its entry with `#`
 - Package name is automatically extracted from the downloaded .deb file
 
 ## Usage

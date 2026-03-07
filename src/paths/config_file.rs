@@ -1,27 +1,23 @@
 //! [`ConfigFile`] lists package sources to download from.
 
 use core::fmt::Display;
-use std::{
-    fs::File,
-    io::{BufRead, BufReader},
-    path::PathBuf,
-};
+use std::{fs, path::PathBuf};
 
-use crate::packages::{ConfiguredPackage, ConfiguredPackages};
+use crate::packages::ConfiguredPackages;
 
 /// The configuration file which lists package sources to download from.
 #[derive(Debug)]
 pub struct ConfigFile(PathBuf);
 
 impl ConfigFile {
-    /// Either the `LOCAL_APT_CONFIG` environment variable or `/etc/local-apt/packages.txt`.
+    /// Either the `LOCAL_APT_CONFIG` environment variable or `/etc/local-apt/packages.toml`.
     ///
     /// `LOCAL_APT_CONFIG` path must be absolute, otherwise it will be ignored and
     /// the default will be used.
     pub fn env_or_default() -> Self {
         let path = std::env::var_os("LOCAL_APT_CONFIG")
             .and_then(is_absolute_path)
-            .unwrap_or_else(|| PathBuf::from("/etc/local-apt/packages.txt"));
+            .unwrap_or_else(|| PathBuf::from("/etc/local-apt/packages.toml"));
 
         Self(path)
     }
@@ -31,32 +27,15 @@ impl ConfigFile {
         self.0.exists()
     }
 
-    /// Parse the configuration file and return the packages to process.
-    ///
-    /// The configuration file should contain one URL per line.
-    /// Lines starting with a `#` character are treated as comments and ignored.
+    /// Parse the TOML configuration file and return the packages to process.
     pub fn read_packages(&self) -> Result<ConfiguredPackages, ReadPackagesError> {
-        let file = File::open(self.0.as_path()).map_err(ReadPackagesError::ConfigFileNotFound)?;
+        let content =
+            fs::read_to_string(self.0.as_path()).map_err(ReadPackagesError::ConfigFileNotFound)?;
 
-        let reader = BufReader::new(file);
+        let packages: ConfiguredPackages =
+            toml::from_str(&content).map_err(ReadPackagesError::ParseError)?;
 
-        let mut packages = Vec::new();
-
-        for line in reader.lines() {
-            let line = line.map_err(ReadPackagesError::ReadError)?;
-            let trimmed = line.trim();
-
-            // Skip empty lines and comments
-            if trimmed.is_empty() || trimmed.starts_with('#') {
-                continue;
-            }
-
-            packages.push(ConfiguredPackage {
-                url: trimmed.to_string(),
-            });
-        }
-
-        Ok(ConfiguredPackages { packages })
+        Ok(packages)
     }
 }
 
@@ -80,8 +59,8 @@ pub enum ReadPackagesError {
     /// The configuration file could not be found or opened.
     ConfigFileNotFound(std::io::Error),
 
-    /// An error occurred while reading the configuration file.
-    ReadError(std::io::Error),
+    /// The configuration file could not be parsed as valid TOML.
+    ParseError(toml::de::Error),
 }
 
 impl Display for ReadPackagesError {
@@ -90,8 +69,8 @@ impl Display for ReadPackagesError {
             ReadPackagesError::ConfigFileNotFound(e) => {
                 write!(f, "Configuration file not found: {}", e)
             }
-            ReadPackagesError::ReadError(e) => {
-                write!(f, "Failed to read configuration: {}", e)
+            ReadPackagesError::ParseError(e) => {
+                write!(f, "Failed to parse configuration: {}", e)
             }
         }
     }
@@ -101,7 +80,7 @@ impl core::error::Error for ReadPackagesError {
     fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
         match self {
             ReadPackagesError::ConfigFileNotFound(e) => Some(e),
-            ReadPackagesError::ReadError(e) => Some(e),
+            ReadPackagesError::ParseError(e) => Some(e),
         }
     }
 }
