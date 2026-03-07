@@ -622,6 +622,7 @@ dependencies = [
  "anyhow",
  "clap",
  "fs2",
+ "httpdate",
  "regex",
  "reqwest",
  "serde",

@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::paths::PoolDir;
+use crate::paths::StateDir;
 
 #[derive(clap::Args, Default, Debug)]
 
@@ -11,11 +11,11 @@ pub struct Args {
 }
 
 impl Args {
-    /// Get the pool directory based on the provided repository directory or default to [`PoolDir::default`].
-    pub fn pool_dir(&self) -> PoolDir {
+    /// Get the state directory based on the provided repository directory or the default.
+    pub fn state_dir(&self) -> StateDir {
         self.repository_directory
             .as_ref()
-            .map(|dir| PoolDir::from_apt_ftparchive_structure(dir, PoolDir::COMPONENT))
+            .map(|dir| StateDir::new(dir))
             .unwrap_or_default()
     }
 }
