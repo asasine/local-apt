@@ -77,7 +77,8 @@ sudo LOCAL_APT_CONFIG=/etc/local-apt/test-packages.toml local-apt update
 ## CONFIGURATION
 
 The configuration file uses TOML format with **\[\[package\]\]** entries.
-Each entry defines a package source with a **url** field.
+Each entry requires a **type** field to specify the source type, along with
+type-specific fields.
 
 To disable a package, comment out its entry with **#**.
 
@@ -86,6 +87,7 @@ Example configuration:
 ```toml
 # Discord package
 [[package]]
+type = "url"
 url = "https://discord.com/api/download?platform=linux&format=deb"
 ```
 

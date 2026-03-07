@@ -25,6 +25,13 @@ as a **\[\[package\]\]** entry (a TOML array of tables).
 
 ### Fields
 
+**type** (string, required)
+: The source type. Must be one of the types listed below.
+
+### Type: url
+
+Download a .deb package directly from a URL.
+
 **url** (string, required)
 : The download URL for the .deb package.
 
@@ -39,6 +46,7 @@ A typical configuration file:
 ```toml
 # Discord
 [[package]]
+type = "url"
 url = "https://discord.com/api/download?platform=linux&format=deb"
 ```
 
@@ -46,9 +54,11 @@ Multiple packages:
 
 ```toml
 [[package]]
+type = "url"
 url = "https://discord.com/api/download?platform=linux&format=deb"
 
 [[package]]
+type = "url"
 url = "https://example.com/another-package.deb"
 ```
 
@@ -57,6 +67,7 @@ To temporarily disable a package, comment out its entry:
 ```toml
 # Discord (disabled)
 # [[package]]
+# type = "url"
 # url = "https://discord.com/api/download?platform=linux&format=deb"
 ```
 

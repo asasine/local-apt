@@ -1,12 +1,13 @@
 # Local APT Package Sources Configuration
 # This file defines package sources to download and include in the local repository.
 #
-# Each [[package]] entry defines a package source. Currently, the only supported
-# source type is a direct URL to a .deb file.
+# Each [[package]] entry defines a package source. The "type" field determines
+# the source type.
 #
 # The downloaded packages will be automatically placed in the appropriate
 # location within /var/lib/local-apt/pool/main/ based on the package metadata.
 
 # Example: Discord
 [[package]]
+type = "url"
 url = "https://discord.com/api/download?platform=linux&format=deb"

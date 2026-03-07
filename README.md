@@ -16,11 +16,13 @@ After installation, configure your package sources in `/etc/local-apt/packages.t
 # Each [[package]] entry defines a package source
 
 [[package]]
+type = "url"
 url = "https://discord.com/api/download?platform=linux&format=deb"
 ```
 
 Each `[[package]]` entry defines a package to download:
 
+- **type**: The source type (currently only `"url"`)
 - **url**: Direct download URL to a `.deb` file
 - To disable a package, comment out its entry with `#`
 - Package name is automatically extracted from the downloaded .deb file

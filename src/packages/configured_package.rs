@@ -15,12 +15,17 @@ use tracing::{debug, info};
 /// A single package to be processed.
 ///
 /// This object is parsed from the configuration file. It contains information to
-/// download and process the package.
+/// download and process the package. The `type` field determines the source type.
 #[derive(Debug, serde::Deserialize)]
-pub struct ConfiguredPackage {
-    /// The download URL for the `.deb` package. This should point directly to a
-    /// `.deb` file.
-    pub url: String,
+#[serde(tag = "type")]
+pub enum ConfiguredPackage {
+    /// A direct URL to a `.deb` package.
+    #[serde(rename = "url")]
+    Url {
+        /// The download URL for the `.deb` package. This should point directly to a
+        /// `.deb` file.
+        url: String,
+    },
 }
 
 impl ConfiguredPackage {
@@ -31,7 +36,9 @@ impl ConfiguredPackage {
         pool_dir: &PoolDir,
         temp_dir: T,
     ) -> Result<(), ProcessPackageError> {
-        info!("Processing package from: {}", self.url);
+        let ConfiguredPackage::Url { url } = self;
+
+        info!("Processing package from: {}", url);
         let temp_file = temp_dir
             .as_ref()
             .join(format!("package-{}.deb", std::process::id()));
@@ -68,8 +75,9 @@ impl ConfiguredPackage {
     // TODO: timestamping to avoid redownloading if the same package already exists
     // in the pool and shares a timestamp with the source (e.g., from HTTP headers)
     fn download_to<P: AsRef<Path>>(&self, path: P) -> Result<(), DownloadError> {
-        let mut response =
-            reqwest::blocking::get(&self.url).map_err(DownloadError::RequestFailed)?;
+        let ConfiguredPackage::Url { url } = self;
+
+        let mut response = reqwest::blocking::get(url).map_err(DownloadError::RequestFailed)?;
 
         let status = response.status();
         if !status.is_success() {
@@ -79,7 +87,7 @@ impl ConfiguredPackage {
         let file = File::create(path).map_err(DownloadError::IoError)?;
         let mut file = std::io::BufWriter::new(file);
         let bytes_writte = io::copy(&mut response, &mut file).map_err(DownloadError::IoError)?;
-        debug!("Downloaded {} bytes from {}", bytes_writte, self.url);
+        debug!("Downloaded {} bytes from {}", bytes_writte, url);
         Ok(())
     }
 }
