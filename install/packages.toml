@@ -4,10 +4,20 @@
 # Each [[package]] entry defines a package source. The "type" field determines
 # the source type.
 #
+# Supported types:
+#   "url"              - Direct download URL to a .deb file
+#   "github-release"   - .deb asset from the latest GitHub Release
+#
 # The downloaded packages will be automatically placed in the appropriate
 # location within /var/lib/local-apt/pool/main/ based on the package metadata.
 
-# Example: Discord
+# Example: Discord (direct URL)
 [[package]]
 type = "url"
 url = "https://discord.com/api/download?platform=linux&format=deb"
+
+# Example: ripgrep (GitHub Release)
+# [[package]]
+# type = "github-release"
+# repo = "BurntSushi/ripgrep"
+# asset_pattern = "ripgrep_.+_amd64\\.deb$"

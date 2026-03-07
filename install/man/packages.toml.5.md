@@ -11,8 +11,7 @@ _/etc/local-apt/packages.toml_
 ## DESCRIPTION
 
 The **packages.toml** file defines the package sources to be downloaded and
-managed by **local-apt**(8). Each entry should point directly to a .deb file
-or an endpoint that serves one.
+managed by **local-apt**(8).
 
 The file is read by **local-apt**(8) during the **update** command. Packages
 are downloaded, validated, and placed into the local APT repository at
@@ -35,6 +34,17 @@ Download a .deb package directly from a URL.
 **url** (string, required)
 : The download URL for the .deb package.
 
+### Type: github-release
+
+Download a .deb package from the latest release of a GitHub repository.
+
+**repo** (string, required)
+: The GitHub repository in `owner/repo` format.
+
+**asset_pattern** (string, required)
+: A regular expression matched against release asset filenames. The first
+asset whose name matches is downloaded.
+
 ### Comments
 
 Lines starting with **#** are comments and are ignored by the TOML parser.
@@ -44,10 +54,16 @@ Lines starting with **#** are comments and are ignored by the TOML parser.
 A typical configuration file:
 
 ```toml
-# Discord
+# Discord (direct URL)
 [[package]]
 type = "url"
 url = "https://discord.com/api/download?platform=linux&format=deb"
+
+# ripgrep (GitHub Release)
+[[package]]
+type = "github-release"
+repo = "BurntSushi/ripgrep"
+asset_pattern = "ripgrep_.+_amd64\\.deb$"
 ```
 
 Multiple packages:
@@ -58,8 +74,9 @@ type = "url"
 url = "https://discord.com/api/download?platform=linux&format=deb"
 
 [[package]]
-type = "url"
-url = "https://example.com/another-package.deb"
+type = "github-release"
+repo = "BurntSushi/ripgrep"
+asset_pattern = "ripgrep_.+_amd64\\.deb$"
 ```
 
 To temporarily disable a package, comment out its entry:

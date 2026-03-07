@@ -85,10 +85,16 @@ To disable a package, comment out its entry with **#**.
 Example configuration:
 
 ```toml
-# Discord package
+# Discord (direct URL)
 [[package]]
 type = "url"
 url = "https://discord.com/api/download?platform=linux&format=deb"
+
+# ripgrep (GitHub Release)
+[[package]]
+type = "github-release"
+repo = "BurntSushi/ripgrep"
+asset_pattern = "ripgrep_.+_amd64\\.deb$"
 ```
 
 ## LOGGING
