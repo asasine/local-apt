@@ -1,6 +1,9 @@
 //! [`PoolDir`] contains the downloaded packages.
 
-use std::path::{Path, PathBuf};
+use std::{
+    io,
+    path::{Path, PathBuf},
+};
 
 /// The package pool directory where downloaded packages are sorted and stored.
 ///
@@ -34,5 +37,48 @@ impl PoolDir {
         let mut buf = [0; 4];
         let first_letter_str = first_letter.encode_utf8(&mut buf);
         Some(self.0.join(first_letter_str).join(package_name))
+    }
+
+    /// Get the root path of the pool directory.
+    pub fn path(&self) -> &Path {
+        &self.0
+    }
+
+    /// Iterate over all `.deb` files in the pool, grouped by package directory.
+    ///
+    /// Each item is a [`Vec`] of `.deb` file paths from the same package directory.
+    /// Directories that contain no `.deb` files are skipped.
+    pub fn deb_files_by_package(&self) -> io::Result<Vec<Vec<PathBuf>>> {
+        let mut result = Vec::new();
+
+        if !self.0.exists() {
+            return Ok(result);
+        }
+
+        for letter_entry in std::fs::read_dir(&self.0)? {
+            let letter_entry = letter_entry?;
+            if !letter_entry.file_type().is_ok_and(|ft| ft.is_dir()) {
+                continue;
+            }
+
+            for pkg_entry in std::fs::read_dir(letter_entry.path())? {
+                let pkg_entry = pkg_entry?;
+                if !pkg_entry.file_type().is_ok_and(|ft| ft.is_dir()) {
+                    continue;
+                }
+
+                let deb_files: Vec<PathBuf> = std::fs::read_dir(pkg_entry.path())?
+                    .filter_map(|e| e.ok())
+                    .map(|e| e.path())
+                    .filter(|p| p.extension().is_some_and(|ext| ext == "deb"))
+                    .collect();
+
+                if !deb_files.is_empty() {
+                    result.push(deb_files);
+                }
+            }
+        }
+
+        Ok(result)
     }
 }

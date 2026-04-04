@@ -2,9 +2,9 @@ use anyhow::{Context, anyhow};
 use clap::Parser;
 use local_apt::{
     cli::Cli,
-    external::update_repository_metadata,
+    external::{dpkg_version_is_greater, get_deb_fields, update_repository_metadata},
     packages::{ProcessResult, UrlTimestamps},
-    paths::{ConfigFile, StateDir, UnlockedLockFile},
+    paths::{ConfigFile, LockError, LockedLockFile, StateDir, UnlockedLockFile},
 };
 use syslog_tracing::{Facility, Options, Syslog};
 use tempfile::TempDir;
@@ -24,6 +24,21 @@ impl Default for Paths {
             state_dir: StateDir::default(),
             lockfile: UnlockedLockFile::default(),
         }
+    }
+}
+
+/// Acquire the lock file, proceeding without it if permission is denied.
+fn acquire_lock(lockfile: UnlockedLockFile) -> anyhow::Result<Option<LockedLockFile>> {
+    match lockfile.lock() {
+        Ok(lock) => Ok(Some(lock)),
+        Err(LockError::PermissionDenied(e)) => {
+            info!(
+                "Could not acquire lock file (permission denied: {}), proceeding without lock",
+                e
+            );
+            Ok(None)
+        }
+        Err(e) => Err(e.into()),
     }
 }
 /// Initialize tracing subscriber with both syslog and stderr outputs.
@@ -56,10 +71,10 @@ fn main() -> anyhow::Result<()> {
 
     let args = Cli::parse();
     match args {
-        Cli::Update(update_args) => {
-            info!("Running update command with args: {:?}", update_args);
+        Cli::Update(args) => {
+            info!("Running update command with args: {:?}", args);
             let config = Paths {
-                state_dir: update_args.state_dir(),
+                state_dir: args.state_dir(),
                 ..Default::default()
             };
 
@@ -70,18 +85,7 @@ fn main() -> anyhow::Result<()> {
             }
 
             // Acquire lock to prevent concurrent runs, will automatically release when dropped
-            let _lock = match config.lockfile.lock() {
-                Ok(lock) => Some(lock),
-                Err(local_apt::paths::LockError::PermissionDenied(e)) => {
-                    info!(
-                        "Could not acquire lock file (permission denied: {}), proceeding without lock",
-                        e
-                    );
-
-                    None
-                }
-                Err(e) => return Err(e.into()),
-            };
+            let _lock = acquire_lock(config.lockfile)?;
 
             info!("Starting package update process");
 
@@ -145,6 +149,87 @@ fn main() -> anyhow::Result<()> {
             }
 
             // Lock will be automatically released when the file is dropped
+            Ok(())
+        }
+        Cli::Cleanup(args) => {
+            info!("Running cleanup command with args: {:?}", args);
+            let config = Paths {
+                state_dir: args.state_dir(),
+                ..Default::default()
+            };
+
+            // Acquire lock to prevent concurrent runs, will automatically release when dropped
+            let _lock = acquire_lock(config.lockfile)?;
+
+            let state_dir = config.state_dir;
+            let pool_dir = state_dir.pool_dir();
+
+            let packages = pool_dir
+                .deb_files_by_package()
+                .context("Failed to read pool directory")?;
+
+            let mut deleted_count: u64 = 0;
+            let mut kept_count: u64 = 0;
+
+            for deb_files in packages {
+                if deb_files.len() <= 1 {
+                    kept_count += deb_files.len() as u64;
+                    continue;
+                }
+
+                // Extract versions for each .deb file
+                let mut versioned_files: Vec<(String, std::path::PathBuf)> = Vec::new();
+                for deb_file in &deb_files {
+                    match get_deb_fields(deb_file, &["Version"]) {
+                        Ok([version]) => versioned_files.push((version, deb_file.clone())),
+                        Err(e) => {
+                            warn!("Failed to read version from {}: {}", deb_file.display(), e);
+                        }
+                    }
+                }
+
+                if versioned_files.len() <= 1 {
+                    kept_count += versioned_files.len() as u64;
+                    continue;
+                }
+
+                // Find the latest version using dpkg --compare-versions
+                let mut latest_idx = 0;
+                for i in 1..versioned_files.len() {
+                    let is_greater = dpkg_version_is_greater(
+                        &versioned_files[i].0,
+                        &versioned_files[latest_idx].0,
+                    )
+                    .context("Failed to run dpkg --compare-versions")?;
+
+                    if is_greater {
+                        latest_idx = i;
+                    }
+                }
+
+                // Delete all except the latest
+                for (i, (version, path)) in versioned_files.iter().enumerate() {
+                    if i == latest_idx {
+                        info!("Keeping {} (version {})", path.display(), version);
+                        kept_count += 1;
+                    } else {
+                        info!("Deleting {} (version {})", path.display(), version);
+                        std::fs::remove_file(path)
+                            .with_context(|| format!("Failed to delete {}", path.display()))?;
+                        deleted_count += 1;
+                    }
+                }
+            }
+
+            if deleted_count > 0 {
+                update_repository_metadata(state_dir.path())
+                    .map_err(|e| anyhow!("Failed to update repository metadata: {}", e))?;
+            }
+
+            info!(
+                "Cleanup complete: {} deleted, {} kept",
+                deleted_count, kept_count
+            );
             Ok(())
         }
     }

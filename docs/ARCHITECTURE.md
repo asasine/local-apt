@@ -19,7 +19,7 @@ flowchart TD
     end
 
     Loop --> G{Any successes?}
-    G -- Yes --> H[Run update-local-repo\napt-ftparchive generate]
+    G -- Yes --> H[Run apt-ftparchive\ngenerate + release]
     G -- No --> I[Report failure]
     H --> J[Release lock]
     I --> J

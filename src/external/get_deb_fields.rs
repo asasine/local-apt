@@ -55,17 +55,30 @@ pub fn get_deb_fields<P: AsRef<Path>, const N: usize>(
         )));
     }
 
-    /// Extract the value from a line of the form `Field: value`
-    fn extract_value(line: &str) -> Option<&str> {
-        line.split_once(':').map(|(_, v)| v).map(|v| v.trim())
+    /// Extract the value from the output of `dpkg-deb -f`.
+    ///
+    /// With multiple fields, the output uses `Field: value` format.
+    /// With a single field, it outputs just the raw value.
+    fn extract_value(line: &str, single_field: bool) -> Option<&str> {
+        if single_field {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed)
+            }
+        } else {
+            line.split_once(':').map(|(_, v)| v.trim())
+        }
     }
 
+    let single_field = N == 1;
     let values = fields
         .iter()
         .zip(output.stdout.lines())
         .map(|(field, line)| {
             let line = line.map_err(Error::CannotReadDpkgDebOutput)?;
-            let value = extract_value(line.as_str())
+            let value = extract_value(line.as_str(), single_field)
                 .ok_or_else(|| Error::FieldNotFound(field.to_string()))?;
 
             if value.is_empty() {
