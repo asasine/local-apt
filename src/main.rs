@@ -56,10 +56,10 @@ fn main() -> anyhow::Result<()> {
 
     let args = Cli::parse();
     match args {
-        Cli::Update(update_args) => {
-            info!("Running update command with args: {:?}", update_args);
+        Cli::Update(args) => {
+            info!("Running update command with args: {:?}", args);
             let config = Paths {
-                state_dir: update_args.state_dir(),
+                state_dir: args.state_dir(),
                 ..Default::default()
             };
 
@@ -147,9 +147,8 @@ fn main() -> anyhow::Result<()> {
             // Lock will be automatically released when the file is dropped
             Ok(())
         }
-        Cli::Cleanup(cleanup_args) => {
-            info!("Running cleanup command with args: {:?}", cleanup_args);
-            let state_dir = cleanup_args.state_dir();
+        Cli::Cleanup(args) => {
+            info!("Running cleanup command with args: {:?}", args);
             let pool_dir = state_dir.pool_dir();
             let pool_path = pool_dir.path();
 
