@@ -2,7 +2,7 @@ use anyhow::{Context, anyhow};
 use clap::Parser;
 use local_apt::{
     cli::Cli,
-    external::update_repository_metadata,
+    external::{get_deb_fields, update_repository_metadata},
     packages::{ProcessResult, UrlTimestamps},
     paths::{ConfigFile, StateDir, UnlockedLockFile},
 };
@@ -145,6 +145,115 @@ fn main() -> anyhow::Result<()> {
             }
 
             // Lock will be automatically released when the file is dropped
+            Ok(())
+        }
+        Cli::Cleanup(cleanup_args) => {
+            info!("Running cleanup command with args: {:?}", cleanup_args);
+            let state_dir = cleanup_args.state_dir();
+            let pool_dir = state_dir.pool_dir();
+            let pool_path = pool_dir.path();
+
+            if !pool_path.exists() {
+                info!("Pool directory does not exist, nothing to clean up");
+                return Ok(());
+            }
+
+            let mut deleted_count: u64 = 0;
+            let mut kept_count: u64 = 0;
+
+            // Iterate letter directories (e.g., pool/main/d/)
+            let letter_dirs =
+                std::fs::read_dir(pool_path).context("Failed to read pool directory")?;
+
+            for letter_entry in letter_dirs {
+                let letter_entry = letter_entry.context("Failed to read letter directory entry")?;
+                if !letter_entry.file_type().map_or(false, |ft| ft.is_dir()) {
+                    continue;
+                }
+
+                // Iterate package directories (e.g., pool/main/d/discord/)
+                let pkg_dirs = std::fs::read_dir(letter_entry.path())
+                    .context("Failed to read package directory")?;
+
+                for pkg_entry in pkg_dirs {
+                    let pkg_entry = pkg_entry.context("Failed to read package directory entry")?;
+                    if !pkg_entry.file_type().map_or(false, |ft| ft.is_dir()) {
+                        continue;
+                    }
+
+                    // Collect all .deb files in this package directory
+                    let entries = std::fs::read_dir(pkg_entry.path())
+                        .context("Failed to read package version directory")?;
+
+                    let deb_files: Vec<std::path::PathBuf> = entries
+                        .filter_map(|e| e.ok())
+                        .map(|e| e.path())
+                        .filter(|p| p.extension().is_some_and(|ext| ext == "deb"))
+                        .collect();
+
+                    if deb_files.len() <= 1 {
+                        kept_count += deb_files.len() as u64;
+                        continue;
+                    }
+
+                    // Extract versions for each .deb file
+                    let mut versioned_files: Vec<(String, std::path::PathBuf)> = Vec::new();
+                    for deb_file in &deb_files {
+                        match get_deb_fields(deb_file, &["Version"]) {
+                            Ok([version]) => versioned_files.push((version, deb_file.clone())),
+                            Err(e) => {
+                                warn!("Failed to read version from {}: {}", deb_file.display(), e);
+                            }
+                        }
+                    }
+
+                    if versioned_files.len() <= 1 {
+                        kept_count += versioned_files.len() as u64;
+                        continue;
+                    }
+
+                    // Find the latest version using dpkg --compare-versions
+                    let mut latest_idx = 0;
+                    for i in 1..versioned_files.len() {
+                        let status = std::process::Command::new("dpkg")
+                            .args([
+                                "--compare-versions",
+                                &versioned_files[i].0,
+                                "gt",
+                                &versioned_files[latest_idx].0,
+                            ])
+                            .status()
+                            .context("Failed to run dpkg --compare-versions")?;
+
+                        if status.success() {
+                            latest_idx = i;
+                        }
+                    }
+
+                    // Delete all except the latest
+                    for (i, (version, path)) in versioned_files.iter().enumerate() {
+                        if i == latest_idx {
+                            info!("Keeping {} (version {})", path.display(), version);
+                            kept_count += 1;
+                        } else {
+                            info!("Deleting {} (version {})", path.display(), version);
+                            std::fs::remove_file(path)
+                                .with_context(|| format!("Failed to delete {}", path.display()))?;
+                            deleted_count += 1;
+                        }
+                    }
+                }
+            }
+
+            if deleted_count > 0 {
+                update_repository_metadata(state_dir.path())
+                    .map_err(|e| anyhow!("Failed to update repository metadata: {}", e))?;
+            }
+
+            info!(
+                "Cleanup complete: {} deleted, {} kept",
+                deleted_count, kept_count
+            );
             Ok(())
         }
     }

@@ -35,4 +35,9 @@ impl PoolDir {
         let first_letter_str = first_letter.encode_utf8(&mut buf);
         Some(self.0.join(first_letter_str).join(package_name))
     }
+
+    /// Get the root path of the pool directory.
+    pub fn path(&self) -> &Path {
+        &self.0
+    }
 }
