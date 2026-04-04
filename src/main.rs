@@ -4,7 +4,7 @@ use local_apt::{
     cli::Cli,
     external::{dpkg_version_is_greater, get_deb_fields, update_repository_metadata},
     packages::{ProcessResult, UrlTimestamps},
-    paths::{ConfigFile, StateDir, UnlockedLockFile},
+    paths::{ConfigFile, LockError, LockedLockFile, StateDir, UnlockedLockFile},
 };
 use syslog_tracing::{Facility, Options, Syslog};
 use tempfile::TempDir;
@@ -24,6 +24,21 @@ impl Default for Paths {
             state_dir: StateDir::default(),
             lockfile: UnlockedLockFile::default(),
         }
+    }
+}
+
+/// Acquire the lock file, proceeding without it if permission is denied.
+fn acquire_lock(lockfile: UnlockedLockFile) -> anyhow::Result<Option<LockedLockFile>> {
+    match lockfile.lock() {
+        Ok(lock) => Ok(Some(lock)),
+        Err(LockError::PermissionDenied(e)) => {
+            info!(
+                "Could not acquire lock file (permission denied: {}), proceeding without lock",
+                e
+            );
+            Ok(None)
+        }
+        Err(e) => Err(e.into()),
     }
 }
 /// Initialize tracing subscriber with both syslog and stderr outputs.
@@ -70,18 +85,7 @@ fn main() -> anyhow::Result<()> {
             }
 
             // Acquire lock to prevent concurrent runs, will automatically release when dropped
-            let _lock = match config.lockfile.lock() {
-                Ok(lock) => Some(lock),
-                Err(local_apt::paths::LockError::PermissionDenied(e)) => {
-                    info!(
-                        "Could not acquire lock file (permission denied: {}), proceeding without lock",
-                        e
-                    );
-
-                    None
-                }
-                Err(e) => return Err(e.into()),
-            };
+            let _lock = acquire_lock(config.lockfile)?;
 
             info!("Starting package update process");
 
@@ -149,6 +153,14 @@ fn main() -> anyhow::Result<()> {
         }
         Cli::Cleanup(args) => {
             info!("Running cleanup command with args: {:?}", args);
+            let config = Paths {
+                state_dir: args.state_dir(),
+                ..Default::default()
+            };
+
+            // Acquire lock to prevent concurrent runs, will automatically release when dropped
+            let _lock = acquire_lock(config.lockfile)?;
+            let state_dir = config.state_dir;
             let pool_dir = state_dir.pool_dir();
             let pool_path = pool_dir.path();
 
