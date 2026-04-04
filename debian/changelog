@@ -1,9 +1,9 @@
-local-apt (1.6.0) UNRELEASED; urgency=medium
+local-apt (1.6.0) noble; urgency=medium
 
   * Add cleanup command
   * Reduce log spam by adding a Release file to generated repository
 
- -- Adam Sasine <asasine@users.noreply.github.com>  Sat, 04 Apr 2026 08:26:49 -0700
+ -- Adam Sasine <asasine@users.noreply.github.com>  Sat, 04 Apr 2026 15:53:58 +0000
 
 local-apt (1.5.0) noble; urgency=medium
 
