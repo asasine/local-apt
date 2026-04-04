@@ -160,94 +160,63 @@ fn main() -> anyhow::Result<()> {
 
             // Acquire lock to prevent concurrent runs, will automatically release when dropped
             let _lock = acquire_lock(config.lockfile)?;
+
             let state_dir = config.state_dir;
             let pool_dir = state_dir.pool_dir();
-            let pool_path = pool_dir.path();
 
-            if !pool_path.exists() {
-                info!("Pool directory does not exist, nothing to clean up");
-                return Ok(());
-            }
+            let packages = pool_dir
+                .deb_files_by_package()
+                .context("Failed to read pool directory")?;
 
             let mut deleted_count: u64 = 0;
             let mut kept_count: u64 = 0;
 
-            // Iterate letter directories (e.g., pool/main/d/)
-            let letter_dirs =
-                std::fs::read_dir(pool_path).context("Failed to read pool directory")?;
-
-            for letter_entry in letter_dirs {
-                let letter_entry = letter_entry.context("Failed to read letter directory entry")?;
-                if !letter_entry.file_type().map_or(false, |ft| ft.is_dir()) {
+            for deb_files in packages {
+                if deb_files.len() <= 1 {
+                    kept_count += deb_files.len() as u64;
                     continue;
                 }
 
-                // Iterate package directories (e.g., pool/main/d/discord/)
-                let pkg_dirs = std::fs::read_dir(letter_entry.path())
-                    .context("Failed to read package directory")?;
-
-                for pkg_entry in pkg_dirs {
-                    let pkg_entry = pkg_entry.context("Failed to read package directory entry")?;
-                    if !pkg_entry.file_type().map_or(false, |ft| ft.is_dir()) {
-                        continue;
-                    }
-
-                    // Collect all .deb files in this package directory
-                    let entries = std::fs::read_dir(pkg_entry.path())
-                        .context("Failed to read package version directory")?;
-
-                    let deb_files: Vec<std::path::PathBuf> = entries
-                        .filter_map(|e| e.ok())
-                        .map(|e| e.path())
-                        .filter(|p| p.extension().is_some_and(|ext| ext == "deb"))
-                        .collect();
-
-                    if deb_files.len() <= 1 {
-                        kept_count += deb_files.len() as u64;
-                        continue;
-                    }
-
-                    // Extract versions for each .deb file
-                    let mut versioned_files: Vec<(String, std::path::PathBuf)> = Vec::new();
-                    for deb_file in &deb_files {
-                        match get_deb_fields(deb_file, &["Version"]) {
-                            Ok([version]) => versioned_files.push((version, deb_file.clone())),
-                            Err(e) => {
-                                warn!("Failed to read version from {}: {}", deb_file.display(), e);
-                            }
+                // Extract versions for each .deb file
+                let mut versioned_files: Vec<(String, std::path::PathBuf)> = Vec::new();
+                for deb_file in &deb_files {
+                    match get_deb_fields(deb_file, &["Version"]) {
+                        Ok([version]) => versioned_files.push((version, deb_file.clone())),
+                        Err(e) => {
+                            warn!("Failed to read version from {}: {}", deb_file.display(), e);
                         }
                     }
+                }
 
-                    if versioned_files.len() <= 1 {
-                        kept_count += versioned_files.len() as u64;
-                        continue;
+                if versioned_files.len() <= 1 {
+                    kept_count += versioned_files.len() as u64;
+                    continue;
+                }
+
+                // Find the latest version using dpkg --compare-versions
+                let mut latest_idx = 0;
+                for i in 1..versioned_files.len() {
+                    let is_greater = dpkg_version_is_greater(
+                        &versioned_files[i].0,
+                        &versioned_files[latest_idx].0,
+                    )
+                    .context("Failed to run dpkg --compare-versions")?;
+
+                    if is_greater {
+                        latest_idx = i;
                     }
+                }
 
-                    // Find the latest version using dpkg --compare-versions
-                    let mut latest_idx = 0;
-                    for i in 1..versioned_files.len() {
-                        let is_greater = dpkg_version_is_greater(
-                            &versioned_files[i].0,
-                            &versioned_files[latest_idx].0,
-                        )
-                        .context("Failed to run dpkg --compare-versions")?;
-
-                        if is_greater {
-                            latest_idx = i;
-                        }
-                    }
-
-                    // Delete all except the latest
-                    for (i, (version, path)) in versioned_files.iter().enumerate() {
-                        if i == latest_idx {
-                            info!("Keeping {} (version {})", path.display(), version);
-                            kept_count += 1;
-                        } else {
-                            info!("Deleting {} (version {})", path.display(), version);
-                            std::fs::remove_file(path)
-                                .with_context(|| format!("Failed to delete {}", path.display()))?;
-                            deleted_count += 1;
-                        }
+                // Delete all except the latest
+                for (i, (version, path)) in versioned_files.iter().enumerate() {
+                    if i == latest_idx {
+                        info!("Keeping {} (version {})", path.display(), version);
+                        kept_count += 1;
+                    } else {
+                        info!("Deleting {} (version {})", path.display(), version);
+                        std::fs::remove_file(path)
+                            .with_context(|| format!("Failed to delete {}", path.display()))?;
+                        deleted_count += 1;
                     }
                 }
             }
