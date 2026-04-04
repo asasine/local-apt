@@ -44,7 +44,7 @@ Download configured packages and update the repository:
 sudo local-apt update
 ```
 
-The script will:
+The `update` command will:
 
 1. Download each enabled package from its configured URL
 2. Automatically place packages in the correct repository pool location
@@ -56,4 +56,10 @@ Install packages from your local repository:
 ```bash
 sudo apt update
 sudo apt install discord
+```
+
+Remove old package versions from the pool, keeping only the latest:
+
+```bash
+sudo local-apt cleanup
 ```

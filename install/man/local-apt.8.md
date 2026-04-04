@@ -8,6 +8,8 @@ local-apt - download packages from configured sources and update local APT repos
 
 **local-apt** update
 
+**local-apt** cleanup
+
 ## DESCRIPTION
 
 **local-apt** downloads Debian package (.deb) files from URLs configured in
@@ -35,6 +37,16 @@ The command performs the following operations:
 
 If individual package downloads fail, the command continues processing
 remaining packages and updates the repository with partial progress.
+
+## COMMANDS
+
+**update**
+: Download packages from configured sources and update the repository.
+
+**cleanup**
+: Remove old package versions from the pool, keeping only the latest version
+of each package. Version comparison is performed using **dpkg**(1). After
+removing old versions, repository metadata is regenerated.
 
 ## FILES
 
@@ -66,6 +78,12 @@ Download configured packages and update repository:
 
 ```bash
 sudo local-apt update
+```
+
+Remove old package versions from the pool:
+
+```bash
+sudo local-apt cleanup
 ```
 
 Use an alternate configuration file:

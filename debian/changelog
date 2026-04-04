@@ -1,3 +1,9 @@
+local-apt (1.6.1) UNRELEASED; urgency=medium
+
+  * Add docs for cleanup command
+
+ -- Adam Sasine <asasine@users.noreply.github.com>  Sat, 04 Apr 2026 08:55:47 -0700
+
 local-apt (1.6.0) noble; urgency=medium
 
   * Add cleanup command
