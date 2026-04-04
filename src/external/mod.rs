@@ -58,6 +58,26 @@ pub fn update_repository_metadata(repo_dir: impl AsRef<Path>) -> Result<(), Erro
         )));
     }
 
+    let output = Command::new("apt-ftparchive")
+        .args([
+            "-c",
+            "/usr/share/local-apt/conf/apt.conf",
+            "release",
+            "dists/stable",
+        ])
+        .current_dir(repo_dir)
+        .output()
+        .map_err(|e| Error::AptFtparchiveFailed(e.into()))?;
+
+    if !output.status.success() {
+        return Err(Error::AptFtparchiveFailed(CommandError::NonZeroExitStatus(
+            output.status,
+        )));
+    }
+
+    std::fs::write(repo_dir.join("dists/stable/Release"), output.stdout)
+        .map_err(Error::CouldNotCreateFile)?;
+
     Ok(())
 }
 
