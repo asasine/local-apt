@@ -7,6 +7,18 @@ pub use command_error::Error as CommandError;
 pub use get_deb_fields::{Error as GetDebFieldsError, get_deb_fields};
 
 use std::{io, path::Path, process::Command};
+
+/// Compare two Debian package version strings using `dpkg --compare-versions`.
+///
+/// Returns `true` if `a` is greater than `b`.
+pub fn dpkg_version_is_greater(a: &str, b: &str) -> Result<bool, CommandError> {
+    let status = Command::new("dpkg")
+        .args(["--compare-versions", a, "gt", b])
+        .status()
+        .map_err(CommandError::Spawn)?;
+
+    Ok(status.success())
+}
 use tracing::info;
 
 /// Update repository metadata using `apt-ftparchive` with the given repository directory.

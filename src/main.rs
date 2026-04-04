@@ -2,7 +2,7 @@ use anyhow::{Context, anyhow};
 use clap::Parser;
 use local_apt::{
     cli::Cli,
-    external::{get_deb_fields, update_repository_metadata},
+    external::{dpkg_version_is_greater, get_deb_fields, update_repository_metadata},
     packages::{ProcessResult, UrlTimestamps},
     paths::{ConfigFile, StateDir, UnlockedLockFile},
 };
@@ -215,17 +215,13 @@ fn main() -> anyhow::Result<()> {
                     // Find the latest version using dpkg --compare-versions
                     let mut latest_idx = 0;
                     for i in 1..versioned_files.len() {
-                        let status = std::process::Command::new("dpkg")
-                            .args([
-                                "--compare-versions",
-                                &versioned_files[i].0,
-                                "gt",
-                                &versioned_files[latest_idx].0,
-                            ])
-                            .status()
-                            .context("Failed to run dpkg --compare-versions")?;
+                        let is_greater = dpkg_version_is_greater(
+                            &versioned_files[i].0,
+                            &versioned_files[latest_idx].0,
+                        )
+                        .context("Failed to run dpkg --compare-versions")?;
 
-                        if status.success() {
+                        if is_greater {
                             latest_idx = i;
                         }
                     }
