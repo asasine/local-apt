@@ -6,6 +6,10 @@ The repository is a standard Rust package and can be built and tested with `carg
 
 When executing locally, the output APT repo directory can be changed with the `-d <PATH>` option on the `update` subcommand.
 
+```bash
+cargo run -- update -d ./tmp/repo/
+```
+
 ## Debian packaging
 
 The debian source and binary packages are built in a container with [build.sh](../build.sh). The binary package is copied into [dist](../dist/).
