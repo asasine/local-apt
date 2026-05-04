@@ -1,0 +1,7 @@
+[Unit]
+Description=Update and cleanup local-apt repository
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/local-apt update
+ExecStart=/usr/bin/local-apt cleanup

@@ -59,6 +59,12 @@ _/var/lib/local-apt/pool/main/_
 _/run/lock/local-apt.lock_
 : Lock file to prevent concurrent execution
 
+_/lib/systemd/system/local-apt.timer_
+: Systemd timer unit for daily execution
+
+_/lib/systemd/system/local-apt.service_
+: Systemd service unit invoked by the timer
+
 ## ENVIRONMENT
 
 **LOCAL_APT_CONFIG**
@@ -115,6 +121,25 @@ repo = "BurntSushi/ripgrep"
 asset_pattern = "ripgrep_.+_amd64\\.deb$"
 ```
 
+## TIMER
+
+A systemd timer unit is included to run **local-apt update** and
+**local-apt cleanup** daily. The timer uses a randomized delay of up to
+one hour to avoid fixed scheduling, and is persistent so missed runs are
+caught up after reboot.
+
+To enable the timer:
+
+```bash
+sudo systemctl enable --now local-apt.timer
+```
+
+To check timer status:
+
+```bash
+systemctl status local-apt.timer
+```
+
 ## LOGGING
 
 All operations are logged to syslog with the **local-apt** tag.
@@ -122,4 +147,5 @@ Messages are also written to stdout/stderr.
 
 ## SEE ALSO
 
-**packages.toml**(5), **apt-ftparchive**(1), **dpkg-deb**(1), **flock**(1)
+**packages.toml**(5), **apt-ftparchive**(1), **dpkg-deb**(1), **flock**(1),
+**systemd.timer**(5), **systemd.service**(5)
