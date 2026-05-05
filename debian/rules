@@ -4,7 +4,6 @@
 MAN_DIR := target/man
 
 # To add new man pages, append the filename to this list
-# Keep this list in sync with the files in local-apt.manpages
 MAN_PAGES := local-apt.8 packages.toml.5
 
 # --- debhelper ---
@@ -16,6 +15,9 @@ override_dh_auto_build:
 
 override_dh_auto_test:
 	cargo test --release
+
+override_dh_installsystemd:
+	dh_installsystemd --no-enable --no-start
 
 execute_before_dh_installman: man
 
