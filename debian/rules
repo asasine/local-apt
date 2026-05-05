@@ -4,6 +4,7 @@
 MAN_DIR := target/man
 
 # To add new man pages, append the filename to this list
+# Keep this list in sync with the files in local-apt.manpages
 MAN_PAGES := local-apt.8 packages.toml.5
 
 # --- debhelper ---
