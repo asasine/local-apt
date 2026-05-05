@@ -1,1 +1,2 @@
-target/man/*
+target/man/local-apt.8
+target/man/packages.toml.5

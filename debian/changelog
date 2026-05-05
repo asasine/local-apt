@@ -1,6 +1,7 @@
 local-apt (1.6.1) UNRELEASED; urgency=medium
 
   * Add docs for cleanup command
+  * Add systemd timer to run daily
 
  -- Adam Sasine <asasine@users.noreply.github.com>  Sat, 04 Apr 2026 08:55:47 -0700
 
