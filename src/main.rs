@@ -2,6 +2,7 @@ mod logging;
 mod output;
 
 use clap::Parser;
+use human_panic::metadata;
 use local_apt::{
     cli::{Cli, RepoArgs},
     external::{
@@ -57,7 +58,9 @@ impl Paths {
 }
 
 fn main() -> ExitCode {
-    human_panic::setup_panic!();
+    human_panic::setup_panic!(
+        metadata!().support("- Open an issue at https://github.com/asasine/local-apt/issues/new and include the generated report file.")
+    );
 
     let cli = Cli::parse();
     let (args, command) = cli.parts();
