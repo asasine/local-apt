@@ -1,25 +1,31 @@
-use crate::external::CommandError;
-use core::fmt::Display;
+use thiserror::Error;
+
+use crate::external::{CommandError, command_error};
 use std::{io::BufRead, path::Path, process::Command};
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum Error {
     /// An error occurred while executing `dpkg-deb` command.
+    #[error("dpkg-deb failed: {0}")]
     DpkgDebFailed(CommandError),
 
     /// Reading the output of `dpkg-deb` failed, which could indicate an issue with
     /// the command's output or an I/O error.
+    #[error("failed to read dpkg-deb output: {0}")]
     CannotReadDpkgDebOutput(std::io::Error),
 
     /// The specified field was not found in the control file of the package.
+    #[error("field not found in control file: {0}")]
     FieldNotFound(String),
 
     /// The specified field was found but the `dpkg-deb` output was empty for that
     /// field.
+    #[error("field is empty in control file: {0}")]
     FieldEmpty(String),
 
     /// The `dpkg-deb` output did not contain the expected number of lines corresponding
     /// to the requested fields.
+    #[error("unexpected dpkg-deb output: expected {expected} lines, got {actual}")]
     UnexpectedOutput { expected: usize, actual: usize },
 }
 
@@ -42,18 +48,9 @@ pub fn get_deb_fields<P: AsRef<Path>, const N: usize>(
     deb_file: P,
     fields: &[&str; N],
 ) -> Result<[String; N], Error> {
-    let output = Command::new("dpkg-deb")
-        .arg("-f")
-        .arg(deb_file.as_ref())
-        .args(fields)
-        .output()
-        .map_err(|e| Error::DpkgDebFailed(CommandError::Spawn(e)))?;
-
-    if !output.status.success() {
-        return Err(Error::DpkgDebFailed(CommandError::NonZeroExitStatus(
-            output.status,
-        )));
-    }
+    let mut command = Command::new("dpkg-deb");
+    command.arg("-f").arg(deb_file.as_ref()).args(fields);
+    let output = command_error::run(&mut command).map_err(Error::DpkgDebFailed)?;
 
     /// Extract the value from the output of `dpkg-deb -f`.
     ///
@@ -97,31 +94,4 @@ pub fn get_deb_fields<P: AsRef<Path>, const N: usize>(
         })?;
 
     Ok(values)
-}
-
-impl Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::DpkgDebFailed(e) => write!(f, "dpkg-deb failed: {e}"),
-            Error::CannotReadDpkgDebOutput(e) => {
-                write!(f, "Failed to read dpkg-deb output: {e}")
-            }
-            Error::FieldNotFound(field) => write!(f, "Field not found in control file: {field}"),
-            Error::FieldEmpty(field) => write!(f, "Field is empty in control file: {field}"),
-            Error::UnexpectedOutput { expected, actual } => write!(
-                f,
-                "Unexpected number of lines in dpkg-deb output: expected {expected}, got {actual}"
-            ),
-        }
-    }
-}
-
-impl core::error::Error for Error {
-    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
-        match self {
-            Error::DpkgDebFailed(e) => Some(e),
-            Error::CannotReadDpkgDebOutput(e) => Some(e),
-            _ => None,
-        }
-    }
 }

@@ -6,9 +6,12 @@
 //! already running and holds the lock, the application will fail to acquire the
 //! lock and exit with an error.
 
-use core::fmt::Display;
 use fs2::FileExt;
-use std::{fs::File, path::PathBuf};
+use std::{
+    fs::File,
+    path::{Path, PathBuf},
+};
+use thiserror::Error;
 use tracing::{debug, error};
 
 /// The lock file ensures only one instance of the application runs at a time.
@@ -32,6 +35,11 @@ impl Default for LockFile {
 pub struct UnlockedLockFile(LockFile);
 
 impl UnlockedLockFile {
+    /// Create a lock file at a custom path.
+    pub fn new(path: impl Into<PathBuf>) -> Self {
+        Self(LockFile(path.into()))
+    }
+
     /// Attempt to acquire an exclusive lock on the lock file.
     ///
     /// If successful, returns a [`LockedLockFile`] that holds the lock until dropped.
@@ -47,7 +55,6 @@ impl UnlockedLockFile {
         })?;
 
         if lock.try_lock_exclusive().is_err() {
-            error!("Another instance of local-apt is already running");
             return Err(LockError::AlreadyLocked);
         }
 
@@ -55,6 +62,11 @@ impl UnlockedLockFile {
             lock_file: self.0,
             lock: Some(lock),
         })
+    }
+
+    /// Get the lock file path.
+    pub fn path(&self) -> &Path {
+        &self.0.0
     }
 }
 
@@ -109,34 +121,17 @@ impl Drop for LockedLockFile {
 }
 
 /// An error that can occur when locking the lock file.
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum LockError {
     /// Failed to create the lock file.
+    #[error("failed to create lock file: {0}")]
     Create(std::io::Error),
 
     /// Insufficient permissions to create or write to the lock file.
+    #[error("permission denied on lock file: {0}")]
     PermissionDenied(std::io::Error),
 
     /// Failed to acquire an exclusive lock on the file.
+    #[error("another instance is already running")]
     AlreadyLocked,
-}
-
-impl Display for LockError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            LockError::Create(e) => write!(f, "Failed to create lock file: {}", e),
-            LockError::PermissionDenied(e) => write!(f, "Permission denied on lock file: {}", e),
-            LockError::AlreadyLocked => write!(f, "Another instance is already running"),
-        }
-    }
-}
-
-impl core::error::Error for LockError {
-    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
-        match self {
-            LockError::Create(e) => Some(e),
-            LockError::PermissionDenied(e) => Some(e),
-            LockError::AlreadyLocked => None,
-        }
-    }
 }

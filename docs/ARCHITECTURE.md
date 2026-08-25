@@ -58,3 +58,31 @@ The APT repo is stored in `/var/lib/local-apt/` and follows standard a APT repos
 ### Lock file
 
 - `/var/lock/local-apt.lock`: locked when `local-apt` runs to ensure only one process modifies `/var/lib/local-apt/`.
+- `<repository>/.local-apt.lock`: used for a repository selected with `-d`, so
+  non-root and concurrent multi-repository runs retain independent locking.
+
+## Output, logging, and errors
+
+The binary keeps machine output separate from operational diagnostics:
+
+- `Reporter` in `src/output.rs` owns stdout. It is silent unless JSON or NDJSON
+  output is requested and emits versioned domain events rather than tracing
+  metadata.
+- `src/logging.rs` configures independent tracing layers. Syslog receives
+  informational operational detail under the `local-apt` identity; stderr
+  receives warnings and errors by default and more detail when requested.
+- `AppError` in `src/main.rs` is the command boundary. Fatal errors are logged
+  once, represented in requested structured output, and mapped to a deliberate
+  exit status.
+- Errors from external commands retain the command name, status, and bounded
+  stderr. Child stdout and stderr are captured so they cannot violate the CLI
+  stream contract.
+
+New command behavior should emit a typed `Event` for facts useful to scripts and
+a tracing event for operational diagnosis. Do not put human progress on stdout,
+serialize Rust debug output as a public interface, or log complete download URLs.
+Source labels must omit credentials, query strings, and fragments.
+
+JSON output is buffered so failures still produce one valid final document.
+NDJSON is streamed one record at a time. A closed pipe disables further output
+without aborting repository mutation midway.

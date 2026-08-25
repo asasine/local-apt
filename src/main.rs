@@ -1,15 +1,21 @@
-use anyhow::{Context, anyhow};
+mod logging;
+mod output;
+
 use clap::Parser;
+use human_panic::metadata;
 use local_apt::{
-    cli::Cli,
-    external::{dpkg_version_is_greater, get_deb_fields, update_repository_metadata},
+    cli::{Cli, RepoArgs},
+    external::{
+        CommandError, Error as MetadataError, GetDebFieldsError, dpkg_version_is_greater,
+        get_deb_fields, update_repository_metadata,
+    },
     packages::{ProcessResult, UrlTimestamps},
-    paths::{ConfigFile, LockError, LockedLockFile, StateDir, UnlockedLockFile},
+    paths::{ConfigFile, LockError, LockedLockFile, ReadPackagesError, StateDir, UnlockedLockFile},
 };
-use syslog_tracing::{Facility, Options, Syslog};
+use output::{Event, Outcome, Reporter, Summary};
+use std::{io, path::PathBuf, process::ExitCode};
 use tempfile::TempDir;
 use tracing::{error, info, warn};
-use tracing_subscriber::{EnvFilter, Layer, layer::SubscriberExt, util::SubscriberInitExt};
 
 struct Paths {
     config_file: ConfigFile,
@@ -19,7 +25,7 @@ struct Paths {
 
 impl Default for Paths {
     fn default() -> Self {
-        Paths {
+        Self {
             config_file: ConfigFile::env_or_default(),
             state_dir: StateDir::default(),
             lockfile: UnlockedLockFile::default(),
@@ -27,210 +33,346 @@ impl Default for Paths {
     }
 }
 
-/// Acquire the lock file, proceeding without it if permission is denied.
-fn acquire_lock(lockfile: UnlockedLockFile) -> anyhow::Result<Option<LockedLockFile>> {
-    match lockfile.lock() {
-        Ok(lock) => Ok(Some(lock)),
-        Err(LockError::PermissionDenied(e)) => {
-            info!(
-                "Could not acquire lock file (permission denied: {}), proceeding without lock",
-                e
-            );
-            Ok(None)
-        }
-        Err(e) => Err(e.into()),
+impl Paths {
+    fn from_args(args: &RepoArgs) -> Result<Self, AppError> {
+        let state_dir = args
+            .state_dir()
+            .map_err(AppError::ResolveRepositoryDirectory)?;
+        let lockfile = if args.repository_directory.is_some() {
+            std::fs::create_dir_all(state_dir.path()).map_err(|source| {
+                AppError::CreateRepositoryDirectory {
+                    path: state_dir.path().to_path_buf(),
+                    source,
+                }
+            })?;
+            UnlockedLockFile::new(state_dir.path().join(".local-apt.lock"))
+        } else {
+            UnlockedLockFile::default()
+        };
+        Ok(Self {
+            state_dir,
+            lockfile,
+            ..Self::default()
+        })
     }
 }
-/// Initialize tracing subscriber with both syslog and stderr outputs.
-///
-/// # Evironment Variables
-/// - `RUST_LOG`: Set the log level (e.g., `info`, `debug`, `error`). Defaults to
-///   `info` if not set.
-fn init_logger() {
-    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
-    let syslog = Syslog::new(c"apt-local", Options::LOG_PID, Facility::User).unwrap();
-    tracing_subscriber::registry()
-        .with(env_filter)
-        .with(vec![
-            tracing_subscriber::fmt::layer()
-                .with_writer(syslog)
-                .with_ansi(false)
-                .without_time()
-                .with_level(false)
-                .with_target(false)
-                .boxed(),
-            tracing_subscriber::fmt::layer()
-                .with_writer(std::io::stderr)
-                .boxed(),
-        ])
-        .init();
+
+fn main() -> ExitCode {
+    human_panic::setup_panic!(
+        metadata!().support("- Open an issue at https://github.com/asasine/local-apt/issues/new and include the generated report file.")
+    );
+
+    let cli = Cli::parse();
+    let (args, command) = cli.parts();
+
+    if let Err(e) = logging::init(args) {
+        eprintln!("local-apt: {e}");
+        return ExitCode::FAILURE;
+    }
+
+    let stdout = io::stdout();
+    let mut reporter = Reporter::new(args.output, stdout.lock(), command.clone());
+    if let Err(e) = reporter.emit(Event::Started { command }) {
+        error!("{e}");
+        return ExitCode::FAILURE;
+    }
+
+    let result = match &cli {
+        Cli::Update(args) => run_update(args, &mut reporter),
+        Cli::Cleanup(args) => run_cleanup(args, &mut reporter),
+    };
+
+    match result {
+        Ok((outcome, summary)) => {
+            let strict_partial = partial_is_failure(&outcome, args.fail_on_partial);
+            if let Err(e) = reporter.finish(outcome, summary) {
+                error!("{e}");
+                return ExitCode::FAILURE;
+            }
+
+            if strict_partial {
+                ExitCode::FAILURE
+            } else {
+                ExitCode::SUCCESS
+            }
+        }
+        Err(e) => {
+            error!("{e}");
+            if let Err(output_error) = reporter
+                .emit(Event::Fatal {
+                    error: e.to_string(),
+                })
+                .and_then(|_| reporter.finish(Outcome::Failure, Summary::default()))
+            {
+                error!("{output_error}");
+            }
+            ExitCode::FAILURE
+        }
+    }
 }
 
-fn main() -> anyhow::Result<()> {
-    init_logger();
+fn partial_is_failure(outcome: &Outcome, fail_on_partial: bool) -> bool {
+    matches!(outcome, Outcome::PartialSuccess) && fail_on_partial
+}
 
-    let args = Cli::parse();
-    match args {
-        Cli::Update(args) => {
-            info!("Running update command with args: {:?}", args);
-            let config = Paths {
-                state_dir: args.state_dir(),
-                ..Default::default()
-            };
+fn run_update<W: io::Write>(
+    args: &RepoArgs,
+    reporter: &mut Reporter<W>,
+) -> Result<(Outcome, Summary), AppError> {
+    let config = Paths::from_args(args)?;
+    info!(repository = %config.state_dir.path().display(), "starting package update");
 
-            // Check if config file exists
-            if !config.config_file.exists() {
-                error!("Configuration file not found: {}", config.config_file);
-                return Err(anyhow!("Configuration file not found"));
+    let _lock = acquire_lock(config.lockfile, reporter)?;
+    let temp_dir = TempDir::new().map_err(AppError::CreateTemporaryDirectory)?;
+    let mut url_timestamps = UrlTimestamps::load(config.state_dir.url_timestamps_path())
+        .map_err(AppError::LoadTimestamps)?;
+    let pool_dir = config.state_dir.pool_dir();
+    let config_path = config.config_file.to_string();
+    let packages =
+        config
+            .config_file
+            .read_packages()
+            .map_err(|source| AppError::ReadConfiguration {
+                path: config_path,
+                source: Box::new(source),
+            })?;
+
+    let mut downloaded = 0_u64;
+    let mut unchanged = 0_u64;
+    let mut failed = 0_u64;
+
+    for package in packages.packages {
+        let source = package.source_label();
+        match package.process(&pool_dir, &temp_dir, &mut url_timestamps) {
+            Ok(ProcessResult::Downloaded {
+                source,
+                package,
+                version,
+                path,
+            }) => {
+                downloaded += 1;
+                reporter.emit(Event::Downloaded {
+                    source,
+                    package,
+                    version,
+                    path: path.display().to_string(),
+                })?;
             }
+            Ok(ProcessResult::AlreadyUpToDate { source }) => {
+                unchanged += 1;
+                reporter.emit(Event::Unchanged { source })?;
+            }
+            Err(e) => {
+                warn!(source, error = %e, "package processing failed");
+                failed += 1;
+                reporter.emit(Event::PackageFailed {
+                    source,
+                    error: e.to_string(),
+                })?;
+            }
+        }
+    }
 
-            // Acquire lock to prevent concurrent runs, will automatically release when dropped
-            let _lock = acquire_lock(config.lockfile)?;
+    if let Err(e) = url_timestamps.save() {
+        let message = format!("failed to save URL timestamp state: {e}");
+        warn!("{message}");
+        reporter.emit(Event::Warning { message })?;
+    }
 
-            info!("Starting package update process");
+    if downloaded > 0 {
+        update_repository_metadata(config.state_dir.path())?;
+        reporter.emit(Event::MetadataUpdated)?;
+    }
 
-            // Create temporary directory
-            let temp_dir = TempDir::new().context("Failed to create temporary directory")?;
+    if failed > 0 && downloaded + unchanged == 0 {
+        return Err(AppError::AllPackagesFailed);
+    }
 
-            // Load URL timestamps mapping for conditional downloads
-            let mut url_timestamps = UrlTimestamps::load(config.state_dir.url_timestamps_path())
-                .context("Failed to load URL timestamps mapping")?;
+    let summary = Summary {
+        downloaded: Some(downloaded),
+        unchanged: Some(unchanged),
+        failed: Some(failed),
+        ..Summary::default()
+    };
+    let outcome = if failed > 0 {
+        Outcome::PartialSuccess
+    } else {
+        Outcome::Success
+    };
+    info!(downloaded, unchanged, failed, "package update completed");
+    Ok((outcome, summary))
+}
 
-            let pool_dir = config.state_dir.pool_dir();
+fn run_cleanup<W: io::Write>(
+    args: &RepoArgs,
+    reporter: &mut Reporter<W>,
+) -> Result<(Outcome, Summary), AppError> {
+    let config = Paths::from_args(args)?;
+    info!(repository = %config.state_dir.path().display(), "starting package cleanup");
+    let _lock = acquire_lock(config.lockfile, reporter)?;
+    let state_dir = config.state_dir;
+    let packages = state_dir
+        .pool_dir()
+        .deb_files_by_package()
+        .map_err(AppError::ReadPool)?;
+    let mut deleted = 0_u64;
+    let mut kept = 0_u64;
 
-            // Parse configuration
-            let packages = config
-                .config_file
-                .read_packages()
-                .context("Failed to parse configuration file")?;
-
-            // Process each package
-            let mut success_count = 0;
-            let mut up_to_date_count = 0;
-            let mut failure_count = 0;
-
-            for package in packages.packages {
-                match package.process(&pool_dir, &temp_dir, &mut url_timestamps) {
-                    Ok(ProcessResult::Downloaded) => success_count += 1,
-                    Ok(ProcessResult::AlreadyUpToDate) => up_to_date_count += 1,
-                    Err(e) => {
-                        warn!("Failed to process {:?}: {}", package, e);
-                        failure_count += 1;
-                    }
+    for deb_files in packages {
+        let mut versioned_files: Vec<(String, String, PathBuf)> = Vec::new();
+        for deb_file in &deb_files {
+            match get_deb_fields(deb_file, &["Package", "Version"]) {
+                Ok([package, version]) => {
+                    versioned_files.push((package, version, deb_file.clone()));
+                }
+                Err(e) => {
+                    let message = format!(
+                        "failed to read package version from {}: {e}",
+                        deb_file.display()
+                    );
+                    warn!("{message}");
+                    reporter.emit(Event::Warning { message })?;
+                    kept += 1;
+                    reporter.emit(Event::Kept {
+                        package: None,
+                        version: None,
+                        path: deb_file.display().to_string(),
+                    })?;
                 }
             }
+        }
 
-            // Save URL timestamps mapping
-            if let Err(e) = url_timestamps.save() {
-                warn!("Failed to save URL timestamps mapping: {}", e);
+        if versioned_files.len() <= 1 {
+            for (package, version, path) in versioned_files {
+                kept += 1;
+                reporter.emit(Event::Kept {
+                    package: Some(package),
+                    version: Some(version),
+                    path: path.display().to_string(),
+                })?;
             }
+            continue;
+        }
 
-            // Update repository metadata if any packages succeeded
-            if success_count > 0 {
-                match update_repository_metadata(config.state_dir.path()) {
-                    Ok(()) => {
-                        info!(
-                            "Repository update complete: {} downloaded, {} up-to-date, {} failed",
-                            success_count, up_to_date_count, failure_count
-                        );
-                    }
-                    Err(e) => {
-                        error!("Failed to update repository metadata: {}", e);
-                        return Err(e.into());
-                    }
-                }
-            } else if failure_count > 0 {
-                warn!("No packages were successfully downloaded");
-                return Err(anyhow!("No packages were successfully downloaded"));
+        let mut latest_idx = 0;
+        for i in 1..versioned_files.len() {
+            if dpkg_version_is_greater(&versioned_files[i].1, &versioned_files[latest_idx].1)? {
+                latest_idx = i;
+            }
+        }
+
+        for (i, (package, version, path)) in versioned_files.iter().enumerate() {
+            if i == latest_idx {
+                kept += 1;
+                reporter.emit(Event::Kept {
+                    package: Some(package.clone()),
+                    version: Some(version.clone()),
+                    path: path.display().to_string(),
+                })?;
             } else {
-                info!(
-                    "No packages configured, all packages disabled, or all packages already up-to-date"
-                );
+                std::fs::remove_file(path).map_err(|source| AppError::DeletePackage {
+                    path: path.clone(),
+                    source,
+                })?;
+                deleted += 1;
+                reporter.emit(Event::Deleted {
+                    package: package.clone(),
+                    version: version.clone(),
+                    path: path.display().to_string(),
+                })?;
             }
-
-            // Lock will be automatically released when the file is dropped
-            Ok(())
         }
-        Cli::Cleanup(args) => {
-            info!("Running cleanup command with args: {:?}", args);
-            let config = Paths {
-                state_dir: args.state_dir(),
-                ..Default::default()
-            };
+    }
 
-            // Acquire lock to prevent concurrent runs, will automatically release when dropped
-            let _lock = acquire_lock(config.lockfile)?;
+    if deleted > 0 {
+        update_repository_metadata(state_dir.path())?;
+        reporter.emit(Event::MetadataUpdated)?;
+    }
 
-            let state_dir = config.state_dir;
-            let pool_dir = state_dir.pool_dir();
+    let summary = Summary {
+        deleted: Some(deleted),
+        kept: Some(kept),
+        ..Summary::default()
+    };
+    info!(deleted, kept, "package cleanup completed");
+    Ok((Outcome::Success, summary))
+}
 
-            let packages = pool_dir
-                .deb_files_by_package()
-                .context("Failed to read pool directory")?;
-
-            let mut deleted_count: u64 = 0;
-            let mut kept_count: u64 = 0;
-
-            for deb_files in packages {
-                if deb_files.len() <= 1 {
-                    kept_count += deb_files.len() as u64;
-                    continue;
-                }
-
-                // Extract versions for each .deb file
-                let mut versioned_files: Vec<(String, std::path::PathBuf)> = Vec::new();
-                for deb_file in &deb_files {
-                    match get_deb_fields(deb_file, &["Version"]) {
-                        Ok([version]) => versioned_files.push((version, deb_file.clone())),
-                        Err(e) => {
-                            warn!("Failed to read version from {}: {}", deb_file.display(), e);
-                        }
-                    }
-                }
-
-                if versioned_files.len() <= 1 {
-                    kept_count += versioned_files.len() as u64;
-                    continue;
-                }
-
-                // Find the latest version using dpkg --compare-versions
-                let mut latest_idx = 0;
-                for i in 1..versioned_files.len() {
-                    let is_greater = dpkg_version_is_greater(
-                        &versioned_files[i].0,
-                        &versioned_files[latest_idx].0,
-                    )
-                    .context("Failed to run dpkg --compare-versions")?;
-
-                    if is_greater {
-                        latest_idx = i;
-                    }
-                }
-
-                // Delete all except the latest
-                for (i, (version, path)) in versioned_files.iter().enumerate() {
-                    if i == latest_idx {
-                        info!("Keeping {} (version {})", path.display(), version);
-                        kept_count += 1;
-                    } else {
-                        info!("Deleting {} (version {})", path.display(), version);
-                        std::fs::remove_file(path)
-                            .with_context(|| format!("Failed to delete {}", path.display()))?;
-                        deleted_count += 1;
-                    }
-                }
-            }
-
-            if deleted_count > 0 {
-                update_repository_metadata(state_dir.path())
-                    .map_err(|e| anyhow!("Failed to update repository metadata: {}", e))?;
-            }
-
-            info!(
-                "Cleanup complete: {} deleted, {} kept",
-                deleted_count, kept_count
+fn acquire_lock<W: io::Write>(
+    lockfile: UnlockedLockFile,
+    reporter: &mut Reporter<W>,
+) -> Result<Option<LockedLockFile>, AppError> {
+    match lockfile.lock() {
+        Ok(lock) => Ok(Some(lock)),
+        Err(LockError::PermissionDenied(source)) => {
+            let message = format!(
+                "lock unavailable due to permission denial; proceeding without it: {source}"
             );
-            Ok(())
+            warn!("{message}");
+            reporter.emit(Event::Warning { message })?;
+            Ok(None)
         }
+        Err(source) => Err(AppError::AcquireLock(source)),
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+enum AppError {
+    #[error("failed to resolve repository directory: {0}")]
+    ResolveRepositoryDirectory(io::Error),
+    #[error("failed to create repository directory {path}: {source}")]
+    CreateRepositoryDirectory { path: PathBuf, source: io::Error },
+    #[error("failed to acquire repository lock: {0}")]
+    AcquireLock(LockError),
+    #[error("failed to read configuration {path}: {source}")]
+    ReadConfiguration {
+        path: String,
+        source: Box<ReadPackagesError>,
+    },
+    #[error("failed to create temporary directory: {0}")]
+    CreateTemporaryDirectory(io::Error),
+    #[error("failed to load URL timestamp state: {0}")]
+    LoadTimestamps(io::Error),
+    #[error("failed to read package pool: {0}")]
+    ReadPool(io::Error),
+    #[error("failed to compare package versions: {0}")]
+    CompareVersions(#[from] CommandError),
+    #[error("failed to inspect package: {0}")]
+    InspectPackage(#[from] GetDebFieldsError),
+    #[error("failed to delete {path}: {source}")]
+    DeletePackage { path: PathBuf, source: io::Error },
+    #[error(transparent)]
+    UpdateMetadata(#[from] MetadataError),
+    #[error(transparent)]
+    Output(#[from] output::Error),
+    #[error("all configured packages failed")]
+    AllPackagesFailed,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn partial_success_is_strict_only_when_requested() {
+        assert!(!partial_is_failure(&Outcome::PartialSuccess, false));
+        assert!(partial_is_failure(&Outcome::PartialSuccess, true));
+        assert!(!partial_is_failure(&Outcome::Success, true));
+    }
+
+    #[test]
+    fn custom_repository_uses_repository_lock() {
+        let temp = tempfile::tempdir().unwrap();
+        let args = RepoArgs {
+            repository_directory: Some(temp.path().join("repo")),
+            ..RepoArgs::default()
+        };
+
+        let paths = Paths::from_args(&args).unwrap();
+
+        assert_eq!(
+            paths.lockfile.path(),
+            temp.path().join("repo/.local-apt.lock")
+        );
     }
 }

@@ -5,12 +5,12 @@ use crate::{
     external::{GetDebFieldsError, get_deb_fields},
     paths::PoolDir,
 };
-use core::fmt::Display;
 use std::{
     fs::{self, File},
     io,
     path::Path,
 };
+use thiserror::Error;
 use tracing::{debug, info};
 
 /// A single package to be processed.
@@ -45,10 +45,15 @@ pub enum ConfiguredPackage {
 /// See [`ConfiguredPackage::process`] for details.
 pub enum ProcessResult {
     /// The package was downloaded and installed into the pool.
-    Downloaded,
+    Downloaded {
+        source: String,
+        package: String,
+        version: String,
+        path: std::path::PathBuf,
+    },
 
     /// The package was already up-to-date (HTTP 304 Not Modified).
-    AlreadyUpToDate,
+    AlreadyUpToDate { source: String },
 }
 
 impl ConfiguredPackage {
@@ -63,11 +68,11 @@ impl ConfiguredPackage {
         temp_dir: T,
         url_timestamps: &mut UrlTimestamps,
     ) -> Result<ProcessResult, ProcessPackageError> {
-        let download_url = self
+        let (download_url, source) = self
             .resolve_download_url()
             .map_err(ProcessPackageError::DownloadFailed)?;
 
-        info!("Processing package from: {}", download_url);
+        info!("Processing package from {source}");
         let if_modified_since = url_timestamps.get_if_modified_since(&download_url);
 
         let temp_file = temp_dir
@@ -79,8 +84,8 @@ impl ConfiguredPackage {
 
         let last_modified = match download_result {
             DownloadResult::NotModified => {
-                info!("Package already up-to-date: {}", download_url);
-                return Ok(ProcessResult::AlreadyUpToDate);
+                info!("Package already up-to-date: {source}");
+                return Ok(ProcessResult::AlreadyUpToDate { source });
             }
             DownloadResult::Downloaded { last_modified } => last_modified,
         };
@@ -109,16 +114,29 @@ impl ConfiguredPackage {
             target_path.display()
         );
 
-        Ok(ProcessResult::Downloaded)
+        Ok(ProcessResult::Downloaded {
+            source,
+            package: pkg_name,
+            version: pkg_version,
+            path: target_path,
+        })
+    }
+
+    /// A source description safe for persistent logs and structured output.
+    pub fn source_label(&self) -> String {
+        match self {
+            Self::Url { url } => sanitized_url(url),
+            Self::GithubRelease { repo, .. } => format!("github:{repo}"),
+        }
     }
 
     /// Resolve the download URL for this package source.
     ///
     /// For `Url` types, this is the URL itself. For `GithubRelease` types, this
     /// queries the GitHub API for the latest release and finds a matching asset.
-    fn resolve_download_url(&self) -> Result<String, DownloadError> {
+    fn resolve_download_url(&self) -> Result<(String, String), DownloadError> {
         match self {
-            ConfiguredPackage::Url { url } => Ok(url.clone()),
+            ConfiguredPackage::Url { url } => Ok((url.clone(), sanitized_url(url))),
             ConfiguredPackage::GithubRelease {
                 repo,
                 asset_pattern,
@@ -127,13 +145,13 @@ impl ConfiguredPackage {
                     .map_err(|e| DownloadError::InvalidAssetPattern(e.to_string()))?;
 
                 let api_url = format!("https://api.github.com/repos/{repo}/releases/latest");
-                info!("Fetching latest release from: {}", api_url);
+                info!("Fetching latest release for github:{repo}");
 
                 let response = http_client()
                     .get(&api_url)
                     .header("Accept", "application/vnd.github+json")
                     .send()
-                    .map_err(DownloadError::RequestFailed)?;
+                    .map_err(DownloadError::request_failed)?;
 
                 let status = response.status();
                 if !status.is_success() {
@@ -141,7 +159,7 @@ impl ConfiguredPackage {
                 }
 
                 let release: GithubRelease =
-                    response.json().map_err(DownloadError::RequestFailed)?;
+                    response.json().map_err(DownloadError::request_failed)?;
 
                 let asset = release
                     .assets
@@ -156,14 +174,23 @@ impl ConfiguredPackage {
                         }
                     })?;
 
-                info!(
-                    "Found matching asset: {} ({})",
-                    asset.name, asset.browser_download_url
-                );
-                Ok(asset.browser_download_url.clone())
+                let source = format!("github:{repo}/{}", asset.name);
+                info!("Found matching asset: {source}");
+                Ok((asset.browser_download_url.clone(), source))
             }
         }
     }
+}
+
+fn sanitized_url(value: &str) -> String {
+    let Ok(mut url) = reqwest::Url::parse(value) else {
+        return "invalid-url".to_owned();
+    };
+    let _ = url.set_username("");
+    let _ = url.set_password(None);
+    url.set_query(None);
+    url.set_fragment(None);
+    url.to_string()
 }
 
 /// Build an HTTP client with a User-Agent header (required by GitHub API).
@@ -199,7 +226,7 @@ fn download_to<P: AsRef<Path>>(
         request = request.header("If-Modified-Since", since);
     }
 
-    let mut response = request.send().map_err(DownloadError::RequestFailed)?;
+    let mut response = request.send().map_err(DownloadError::request_failed)?;
 
     let status = response.status();
     if status == reqwest::StatusCode::NOT_MODIFIED {
@@ -219,7 +246,11 @@ fn download_to<P: AsRef<Path>>(
     let file = File::create(path).map_err(DownloadError::IoError)?;
     let mut file = std::io::BufWriter::new(file);
     let bytes_written = io::copy(&mut response, &mut file).map_err(DownloadError::IoError)?;
-    debug!("Downloaded {} bytes from {}", bytes_written, url);
+    debug!(
+        "Downloaded {} bytes from {}",
+        bytes_written,
+        sanitized_url(url)
+    );
     Ok(DownloadResult::Downloaded { last_modified })
 }
 
@@ -237,111 +268,78 @@ struct GithubAsset {
 /// Errors that can occur when processing a package.
 ///
 /// See [`ConfiguredPackage::process`] for details.
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ProcessPackageError {
+    #[error("failed to download package: {0}")]
     DownloadFailed(DownloadError),
+    #[error("invalid deb file: {0}")]
     InvalidDeb(InvalidDebError),
+    #[error("package I/O failed: {0}")]
     IoError(io::Error),
-}
-
-impl Display for ProcessPackageError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ProcessPackageError::DownloadFailed(e) => {
-                write!(f, "Failed to download package: {}", e)
-            }
-            ProcessPackageError::InvalidDeb(e) => write!(f, "Invalid deb file: {}", e),
-            ProcessPackageError::IoError(e) => write!(f, "I/O error: {}", e),
-        }
-    }
-}
-
-impl core::error::Error for ProcessPackageError {
-    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
-        match self {
-            ProcessPackageError::DownloadFailed(e) => Some(e),
-            ProcessPackageError::InvalidDeb(e) => Some(e),
-            ProcessPackageError::IoError(e) => Some(e),
-        }
-    }
 }
 
 /// Errors that can occur when downloading a package.
 ///
 /// See [`ConfiguredPackage::process`] for details.
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum DownloadError {
-    RequestFailed(reqwest::Error),
+    #[error("HTTP request failed ({kind})")]
+    RequestFailed {
+        kind: &'static str,
+        source: reqwest::Error,
+    },
+    #[error("HTTP request returned {0}")]
     RequestNotSuccessful(reqwest::StatusCode),
+    #[error("download I/O failed: {0}")]
     IoError(io::Error),
+    #[error("invalid asset_pattern regex: {0}")]
     InvalidAssetPattern(String),
+    #[error("no release asset matched '{pattern}'; available assets: {available:?}")]
     NoMatchingAsset {
         pattern: String,
         available: Vec<String>,
     },
 }
 
-impl Display for DownloadError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            DownloadError::RequestFailed(e) => write!(f, "HTTP request failed: {}", e),
-            DownloadError::RequestNotSuccessful(status) => {
-                write!(
-                    f,
-                    "HTTP request returned non-success status code: {}",
-                    status
-                )
-            }
-            DownloadError::IoError(e) => write!(f, "I/O error: {}", e),
-            DownloadError::InvalidAssetPattern(e) => {
-                write!(f, "Invalid asset_pattern regex: {}", e)
-            }
-            DownloadError::NoMatchingAsset { pattern, available } => {
-                write!(
-                    f,
-                    "No release asset matched pattern '{}'. Available assets: {:?}",
-                    pattern, available
-                )
-            }
-        }
-    }
-}
-
-impl core::error::Error for DownloadError {
-    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
-        match self {
-            DownloadError::RequestFailed(e) => Some(e),
-            DownloadError::RequestNotSuccessful(_) => None,
-            DownloadError::IoError(e) => Some(e),
-            DownloadError::InvalidAssetPattern(_) => None,
-            DownloadError::NoMatchingAsset { .. } => None,
-        }
+impl DownloadError {
+    fn request_failed(source: reqwest::Error) -> Self {
+        let kind = if source.is_timeout() {
+            "request timed out"
+        } else if source.is_connect() {
+            "connection failed"
+        } else if source.is_decode() {
+            "response decoding failed"
+        } else if source.is_body() {
+            "response body failed"
+        } else if source.is_builder() {
+            "request could not be built"
+        } else {
+            "request transport failed"
+        };
+        Self::RequestFailed { kind, source }
     }
 }
 
 /// Errors that can occur when validating a deb file and extracting metadata from it.
 ///
 /// See [`ConfiguredPackage::process`] for details.
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum InvalidDebError {
+    #[error("failed to extract fields from deb: {0}")]
     Fields(GetDebFieldsError),
+    #[error("package name is empty")]
     NameEmpty,
 }
 
-impl Display for InvalidDebError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            InvalidDebError::Fields(e) => write!(f, "Failed to extract fields from deb: {}", e),
-            InvalidDebError::NameEmpty => write!(f, "Package name is empty"),
-        }
-    }
-}
+#[cfg(test)]
+mod tests {
+    use super::sanitized_url;
 
-impl core::error::Error for InvalidDebError {
-    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
-        match self {
-            InvalidDebError::Fields(e) => Some(e),
-            InvalidDebError::NameEmpty => None,
-        }
+    #[test]
+    fn source_labels_remove_secrets() {
+        assert_eq!(
+            sanitized_url("https://user:password@example.com/pkg.deb?token=secret#fragment"),
+            "https://example.com/pkg.deb"
+        );
     }
 }
