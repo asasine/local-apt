@@ -11,24 +11,24 @@ repository = "https://github.com/asasine/local-apt.git"
 version = "1.6.1"
 
 [dependencies]
-clap = { version = "4.5.60", features = ["derive"] }
-fs2 = "0.4"
-httpdate = "1"
+clap = { version = "4.6.6", features = ["derive"] }
+fs2 = "0.4.3"
+httpdate = "1.0.3"
 human-panic = "2.0.8"
-regex = "1.12.3"
-reqwest = { version = "0.11", features = [
+regex = "1.13.1"
+reqwest = { version = "0.13.4", features = [
     "blocking",
     "json",
-    "rustls-tls",
+    "rustls",
 ], default-features = false }
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.149"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
 syslog-tracing = "0.3.1"
-tempfile = "3.8"
+tempfile = "3.27.0"
 thiserror = "2"
-toml = "0.9.8"
+toml = "1.1.4"
 tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = [
+tracing-subscriber = { version = "0.3.23", features = [
     "env-filter",
     "fmt",
     "std",
