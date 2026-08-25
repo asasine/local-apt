@@ -18,13 +18,9 @@ pub fn init(args: &RepoArgs) -> Result<(), Error> {
             .with_level(false)
             .with_target(false)
             .with_filter(LevelFilter::INFO)
-            .boxed()
     });
     let stderr_layer = tracing_subscriber::fmt::layer()
         .with_writer(std::io::stderr)
-        .with_ansi(false)
-        .without_time()
-        .with_target(false)
         .with_filter(stderr_filter);
 
     tracing_subscriber::registry()
@@ -44,8 +40,10 @@ fn stderr_filter(args: &RepoArgs) -> Result<EnvFilter, Error> {
         "error".to_owned()
     } else if args.verbose == 1 {
         "info".to_owned()
-    } else if args.verbose >= 2 {
+    } else if args.verbose == 2 {
         "debug".to_owned()
+    } else if args.verbose >= 3 {
+        "trace".to_owned()
     } else if let Ok(filter) = std::env::var("RUST_LOG") {
         filter
     } else {
