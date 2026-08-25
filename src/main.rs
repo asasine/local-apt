@@ -67,6 +67,7 @@ fn init_logger() {
 }
 
 fn main() -> anyhow::Result<()> {
+    human_panic::setup_panic!();
     init_logger();
 
     let args = Cli::parse();

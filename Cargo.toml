@@ -25,3 +25,4 @@ tracing-subscriber = { version = "0.3", features = [
 fs2 = "0.4"
 clap = { version = "4.5.60", features = ["derive"] }
 syslog-tracing = "0.3.1"
+human-panic = "2.0.8"
