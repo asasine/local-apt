@@ -93,7 +93,9 @@ fn run_update<W: io::Write>(
     reporter: &mut Reporter<W>,
 ) -> Result<(Outcome, Summary), AppError> {
     let config = Paths {
-        state_dir: args.state_dir(),
+        state_dir: args
+            .state_dir()
+            .map_err(AppError::ResolveRepositoryDirectory)?,
         ..Default::default()
     };
     info!(repository = %config.state_dir.path().display(), "starting package update");
@@ -184,7 +186,9 @@ fn run_cleanup<W: io::Write>(
     reporter: &mut Reporter<W>,
 ) -> Result<(Outcome, Summary), AppError> {
     let config = Paths {
-        state_dir: args.state_dir(),
+        state_dir: args
+            .state_dir()
+            .map_err(AppError::ResolveRepositoryDirectory)?,
         ..Default::default()
     };
     info!(repository = %config.state_dir.path().display(), "starting package cleanup");
@@ -198,11 +202,6 @@ fn run_cleanup<W: io::Write>(
     let mut kept = 0_u64;
 
     for deb_files in packages {
-        if deb_files.len() <= 1 {
-            kept += deb_files.len() as u64;
-            continue;
-        }
-
         let mut versioned_files: Vec<(String, String, PathBuf)> = Vec::new();
         for deb_file in &deb_files {
             match get_deb_fields(deb_file, &["Package", "Version"]) {
@@ -217,12 +216,24 @@ fn run_cleanup<W: io::Write>(
                     warn!("{message}");
                     reporter.emit(Event::Warning { message })?;
                     kept += 1;
+                    reporter.emit(Event::Kept {
+                        package: None,
+                        version: None,
+                        path: deb_file.display().to_string(),
+                    })?;
                 }
             }
         }
 
         if versioned_files.len() <= 1 {
-            kept += versioned_files.len() as u64;
+            for (package, version, path) in versioned_files {
+                kept += 1;
+                reporter.emit(Event::Kept {
+                    package: Some(package),
+                    version: Some(version),
+                    path: path.display().to_string(),
+                })?;
+            }
             continue;
         }
 
@@ -237,8 +248,8 @@ fn run_cleanup<W: io::Write>(
             if i == latest_idx {
                 kept += 1;
                 reporter.emit(Event::Kept {
-                    package: package.clone(),
-                    version: version.clone(),
+                    package: Some(package.clone()),
+                    version: Some(version.clone()),
                     path: path.display().to_string(),
                 })?;
             } else {
@@ -290,6 +301,8 @@ fn acquire_lock<W: io::Write>(
 
 #[derive(Debug, thiserror::Error)]
 enum AppError {
+    #[error("failed to resolve repository directory: {0}")]
+    ResolveRepositoryDirectory(io::Error),
     #[error("failed to acquire repository lock: {0}")]
     AcquireLock(LockError),
     #[error("failed to read configuration {path}: {source}")]

@@ -1,6 +1,6 @@
 use crate::paths::StateDir;
 use clap::{ArgAction, Parser, ValueEnum};
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 
 /// Common arguments shared by subcommands that operate on the repository.
 #[derive(clap::Args, Default, Debug)]
@@ -28,12 +28,23 @@ pub struct RepoArgs {
 
 impl RepoArgs {
     /// Get the state directory based on the provided repository directory or the default.
-    pub fn state_dir(&self) -> StateDir {
-        self.repository_directory
-            .as_ref()
-            .map(StateDir::new)
-            .unwrap_or_default()
+    pub fn state_dir(&self) -> std::io::Result<StateDir> {
+        let Some(path) = &self.repository_directory else {
+            return Ok(StateDir::default());
+        };
+        let absolute = if path.is_absolute() {
+            path.clone()
+        } else {
+            std::env::current_dir()?.join(path)
+        };
+        Ok(StateDir::new(without_current_components(&absolute)))
     }
+}
+
+fn without_current_components(path: &Path) -> PathBuf {
+    path.components()
+        .filter(|component| !matches!(component, Component::CurDir))
+        .collect()
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -70,5 +81,38 @@ impl Cli {
 impl Default for Cli {
     fn default() -> Self {
         Cli::Update(Default::default())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn relative_repository_directory_becomes_absolute() {
+        let args = RepoArgs {
+            repository_directory: Some(PathBuf::from("repo")),
+            ..RepoArgs::default()
+        };
+
+        let state_dir = args.state_dir().unwrap();
+
+        assert!(state_dir.path().is_absolute());
+        assert!(state_dir.path().ends_with("repo"));
+    }
+
+    #[test]
+    fn repository_directory_does_not_include_current_components() {
+        let args = RepoArgs {
+            repository_directory: Some(PathBuf::from("./tmp/./repo")),
+            ..RepoArgs::default()
+        };
+
+        let state_dir = args.state_dir().unwrap();
+
+        assert_eq!(
+            state_dir.path(),
+            std::env::current_dir().unwrap().join("tmp/repo")
+        );
     }
 }
