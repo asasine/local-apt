@@ -6,9 +6,9 @@ local-apt - download packages from configured sources and update local APT repos
 
 ## SYNOPSIS
 
-**local-apt** update
+**local-apt** update [**OPTIONS**]
 
-**local-apt** cleanup
+**local-apt** cleanup [**OPTIONS**]
 
 ## DESCRIPTION
 
@@ -48,6 +48,26 @@ remaining packages and updates the repository with partial progress.
 of each package. Version comparison is performed using **dpkg**(1). After
 removing old versions, repository metadata is regenerated.
 
+## OPTIONS
+
+**-d**, **--repository-directory** _PATH_
+: Store repository state at _PATH_ instead of _/var/lib/local-apt/_.
+
+**--output** _FORMAT_
+: Write a stable machine-readable report to stdout. _FORMAT_ is **ndjson** for
+one event per line or **json** for one final document containing all events.
+With no output option, successful commands write nothing to stdout.
+
+**-v**, **--verbose**
+: Write informational progress to stderr. Repeat as **-vv** for debug details.
+
+**-q**, **--quiet**
+: Only write fatal errors to stderr. Conflicts with **--verbose**.
+
+**--fail-on-partial**
+: Return a nonzero status when any configured package fails, even if another
+package was downloaded or was already up to date.
+
 ## FILES
 
 _/etc/local-apt/packages.toml_
@@ -70,13 +90,19 @@ _/lib/systemd/system/local-apt.service_
 **LOCAL_APT_CONFIG**
 : If set, specifies an alternate configuration file location
 
+**RUST_LOG**
+: Overrides the default warning-level stderr filter when neither **--verbose**
+nor **--quiet** is supplied. Explicit verbosity options take precedence.
+
 ## EXIT STATUS
 
 **0**
-: Success - at least one package was successfully downloaded and repository updated
+: Success. Package-level partial success also returns zero unless
+**--fail-on-partial** is used.
 
 **1**
-: Failure - configuration file not found, already running, or no packages downloaded
+: Command-wide failure, all configured packages failed, output failed, or partial
+success with **--fail-on-partial**.
 
 ## EXAMPLES
 
@@ -96,6 +122,18 @@ Use an alternate configuration file:
 
 ```bash
 sudo LOCAL_APT_CONFIG=/etc/local-apt/test-packages.toml local-apt update
+```
+
+Process a stream of update events:
+
+```bash
+local-apt update --output=ndjson | jq -c 'select(.event == "downloaded")'
+```
+
+Read the final cleanup summary:
+
+```bash
+local-apt cleanup --output=json | jq '.summary'
 ```
 
 ## CONFIGURATION
@@ -142,8 +180,19 @@ systemctl status local-apt.timer
 
 ## LOGGING
 
-All operations are logged to syslog with the **local-apt** tag.
-Messages are also written to stdout/stderr.
+Operational events are logged to syslog with the **local-apt** tag. Syslog uses
+informational detail independently of the interactive stderr filter. If syslog
+is unavailable, the command continues and writes a warning to stderr.
+
+Warnings and errors are written to stderr by default. Informational and debug
+progress can be enabled with **--verbose**. Human-readable logs never use stdout.
+
+Structured stdout uses schema version 1. URLs in all outputs omit user
+information, query strings, and fragments. **ndjson** emits events as they occur
+and ends with a **finished** event. **json** emits one document with
+**schema_version**, **command**, **outcome**, **summary**, and **events** fields.
+If a pipe consumer closes early, repository maintenance continues rather than
+stopping after a partial mutation.
 
 ## SEE ALSO
 

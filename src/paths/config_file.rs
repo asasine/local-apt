@@ -1,7 +1,8 @@
 //! [`ConfigFile`] lists package sources to download from.
 
-use core::fmt::Display;
-use std::{fs, path::PathBuf};
+use std::{fmt::Display, fs, path::PathBuf};
+
+use thiserror::Error;
 
 use crate::packages::ConfiguredPackages;
 
@@ -33,7 +34,12 @@ impl ConfigFile {
             fs::read_to_string(self.0.as_path()).map_err(ReadPackagesError::ConfigFileNotFound)?;
 
         let packages: ConfiguredPackages =
-            toml::from_str(&content).map_err(ReadPackagesError::ParseError)?;
+            toml::from_str(&content).map_err(|source: toml::de::Error| {
+                ReadPackagesError::ParseError {
+                    message: source.message().to_owned(),
+                    source,
+                }
+            })?;
 
         Ok(packages)
     }
@@ -54,33 +60,16 @@ fn is_absolute_path(path: impl Into<PathBuf>) -> Option<PathBuf> {
 /// Errors that can occur when reading the configuration file.
 ///
 /// See [`ConfigFile::read_packages`] for details.
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ReadPackagesError {
     /// The configuration file could not be found or opened.
+    #[error("configuration file could not be read: {0}")]
     ConfigFileNotFound(std::io::Error),
 
     /// The configuration file could not be parsed as valid TOML.
-    ParseError(toml::de::Error),
-}
-
-impl Display for ReadPackagesError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ReadPackagesError::ConfigFileNotFound(e) => {
-                write!(f, "Configuration file not found: {}", e)
-            }
-            ReadPackagesError::ParseError(e) => {
-                write!(f, "Failed to parse configuration: {}", e)
-            }
-        }
-    }
-}
-
-impl core::error::Error for ReadPackagesError {
-    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
-        match self {
-            ReadPackagesError::ConfigFileNotFound(e) => Some(e),
-            ReadPackagesError::ParseError(e) => Some(e),
-        }
-    }
+    #[error("failed to parse configuration: {message}")]
+    ParseError {
+        message: String,
+        source: toml::de::Error,
+    },
 }

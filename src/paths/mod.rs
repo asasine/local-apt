@@ -5,7 +5,7 @@ mod lock_file;
 mod pool_dir;
 mod state_dir;
 
-pub use config_file::ConfigFile;
+pub use config_file::{ConfigFile, ReadPackagesError};
 pub use lock_file::{LockError, LockedLockFile, UnlockedLockFile};
 pub use pool_dir::PoolDir;
 pub use state_dir::StateDir;
