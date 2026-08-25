@@ -48,7 +48,7 @@ fn acquire_lock(lockfile: UnlockedLockFile) -> anyhow::Result<Option<LockedLockF
 ///   `info` if not set.
 fn init_logger() {
     let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
-    let syslog = Syslog::new(c"apt-local", Options::LOG_PID, Facility::User).unwrap();
+    let syslog = Syslog::new(c"local-apt", Options::LOG_PID, Facility::User).unwrap();
     tracing_subscriber::registry()
         .with(env_filter)
         .with(vec![
