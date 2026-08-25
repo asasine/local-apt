@@ -32,6 +32,30 @@ impl Default for Paths {
     }
 }
 
+impl Paths {
+    fn from_args(args: &RepoArgs) -> Result<Self, AppError> {
+        let state_dir = args
+            .state_dir()
+            .map_err(AppError::ResolveRepositoryDirectory)?;
+        let lockfile = if args.repository_directory.is_some() {
+            std::fs::create_dir_all(state_dir.path()).map_err(|source| {
+                AppError::CreateRepositoryDirectory {
+                    path: state_dir.path().to_path_buf(),
+                    source,
+                }
+            })?;
+            UnlockedLockFile::new(state_dir.path().join(".local-apt.lock"))
+        } else {
+            UnlockedLockFile::default()
+        };
+        Ok(Self {
+            state_dir,
+            lockfile,
+            ..Self::default()
+        })
+    }
+}
+
 fn main() -> ExitCode {
     human_panic::setup_panic!();
 
@@ -92,12 +116,7 @@ fn run_update<W: io::Write>(
     args: &RepoArgs,
     reporter: &mut Reporter<W>,
 ) -> Result<(Outcome, Summary), AppError> {
-    let config = Paths {
-        state_dir: args
-            .state_dir()
-            .map_err(AppError::ResolveRepositoryDirectory)?,
-        ..Default::default()
-    };
+    let config = Paths::from_args(args)?;
     info!(repository = %config.state_dir.path().display(), "starting package update");
 
     let _lock = acquire_lock(config.lockfile, reporter)?;
@@ -185,12 +204,7 @@ fn run_cleanup<W: io::Write>(
     args: &RepoArgs,
     reporter: &mut Reporter<W>,
 ) -> Result<(Outcome, Summary), AppError> {
-    let config = Paths {
-        state_dir: args
-            .state_dir()
-            .map_err(AppError::ResolveRepositoryDirectory)?,
-        ..Default::default()
-    };
+    let config = Paths::from_args(args)?;
     info!(repository = %config.state_dir.path().display(), "starting package cleanup");
     let _lock = acquire_lock(config.lockfile, reporter)?;
     let state_dir = config.state_dir;
@@ -303,6 +317,8 @@ fn acquire_lock<W: io::Write>(
 enum AppError {
     #[error("failed to resolve repository directory: {0}")]
     ResolveRepositoryDirectory(io::Error),
+    #[error("failed to create repository directory {path}: {source}")]
+    CreateRepositoryDirectory { path: PathBuf, source: io::Error },
     #[error("failed to acquire repository lock: {0}")]
     AcquireLock(LockError),
     #[error("failed to read configuration {path}: {source}")]
@@ -339,5 +355,21 @@ mod tests {
         assert!(!partial_is_failure(&Outcome::PartialSuccess, false));
         assert!(partial_is_failure(&Outcome::PartialSuccess, true));
         assert!(!partial_is_failure(&Outcome::Success, true));
+    }
+
+    #[test]
+    fn custom_repository_uses_repository_lock() {
+        let temp = tempfile::tempdir().unwrap();
+        let args = RepoArgs {
+            repository_directory: Some(temp.path().join("repo")),
+            ..RepoArgs::default()
+        };
+
+        let paths = Paths::from_args(&args).unwrap();
+
+        assert_eq!(
+            paths.lockfile.path(),
+            temp.path().join("repo/.local-apt.lock")
+        );
     }
 }

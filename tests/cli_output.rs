@@ -53,6 +53,7 @@ fn successful_default_output_is_silent() {
 
     assert!(output.status.success());
     assert!(output.stdout.is_empty());
+    assert!(output.stderr.is_empty());
 }
 
 #[test]

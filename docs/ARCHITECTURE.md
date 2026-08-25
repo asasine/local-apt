@@ -58,6 +58,8 @@ The APT repo is stored in `/var/lib/local-apt/` and follows standard a APT repos
 ### Lock file
 
 - `/var/lock/local-apt.lock`: locked when `local-apt` runs to ensure only one process modifies `/var/lib/local-apt/`.
+- `<repository>/.local-apt.lock`: used for a repository selected with `-d`, so
+  non-root and concurrent multi-repository runs retain independent locking.
 
 ## Output, logging, and errors
 

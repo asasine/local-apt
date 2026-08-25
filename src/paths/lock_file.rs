@@ -7,7 +7,10 @@
 //! lock and exit with an error.
 
 use fs2::FileExt;
-use std::{fs::File, path::PathBuf};
+use std::{
+    fs::File,
+    path::{Path, PathBuf},
+};
 use thiserror::Error;
 use tracing::{debug, error};
 
@@ -32,6 +35,11 @@ impl Default for LockFile {
 pub struct UnlockedLockFile(LockFile);
 
 impl UnlockedLockFile {
+    /// Create a lock file at a custom path.
+    pub fn new(path: impl Into<PathBuf>) -> Self {
+        Self(LockFile(path.into()))
+    }
+
     /// Attempt to acquire an exclusive lock on the lock file.
     ///
     /// If successful, returns a [`LockedLockFile`] that holds the lock until dropped.
@@ -54,6 +62,11 @@ impl UnlockedLockFile {
             lock_file: self.0,
             lock: Some(lock),
         })
+    }
+
+    /// Get the lock file path.
+    pub fn path(&self) -> &Path {
+        &self.0.0
     }
 }
 

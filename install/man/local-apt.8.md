@@ -76,8 +76,11 @@ _/etc/local-apt/packages.toml_
 _/var/lib/local-apt/pool/main/_
 : Package storage directory
 
-_/run/lock/local-apt.lock_
-: Lock file to prevent concurrent execution
+_/var/lock/local-apt.lock_
+: Lock file for the default repository
+
+_<repository>/.local-apt.lock_
+: Per-repository lock file when **--repository-directory** is used
 
 _/lib/systemd/system/local-apt.timer_
 : Systemd timer unit for daily execution

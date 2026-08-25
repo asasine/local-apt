@@ -90,4 +90,9 @@ local-apt cleanup --output=json | jq .
 
 `ndjson` writes one event per line as the command runs. `json` writes one final
 document containing the command outcome, summary, and all events. Fatal commands
-still produce valid structured output.
+still produce valid structured output. Filesystem paths are absolute and omit
+redundant `.` components.
+
+The default repository uses `/var/lock/local-apt.lock`. A repository selected
+with `-d` uses `<repository>/.local-apt.lock`, allowing safe non-root operation
+without sharing a lock with other repository roots.
