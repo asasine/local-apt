@@ -8,7 +8,7 @@ keywords = ["apt", "deb"]
 license = "Apache-2.0"
 name = "local-apt"
 repository = "https://github.com/asasine/local-apt.git"
-version = "1.6.1"
+version = "1.7.0"
 
 [dependencies]
 clap = { version = "4.6.6", features = ["derive"] }

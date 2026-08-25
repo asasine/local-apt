@@ -1,9 +1,9 @@
-local-apt (1.6.1ubuntu1) UNRELEASED; urgency=medium
+local-apt (1.7.0) noble; urgency=medium
 
   * Add panic handler to locally capture panic traces for users to report
   * Overhaul stdout, stderr, and syslog behavior with structured output
 
- -- Adam Sasine <asasine@users.noreply.github.com>  Tue, 25 Aug 2026 09:22:27 -0700
+ -- Adam Sasine <asasine@users.noreply.github.com>  Tue, 25 Aug 2026 17:42:36 +0000
 
 local-apt (1.6.1) noble; urgency=medium
 
